@@ -58,7 +58,7 @@ export class MessageManager {
     this.selectMessages = this.db.prepare(`
       SELECT * FROM messages 
       WHERE 1=1
-        AND ($participant IS NULL OR from_participant = $participant OR json_extract(to_participants, '$[*]') LIKE '%' || $participant || '%')
+        AND ($participant IS NULL OR from_participant = $participant OR to_participants LIKE '%' || $participant || '%')
         AND ($status IS NULL OR status IN (SELECT value FROM json_each($status)))
         AND ($type IS NULL OR type IN (SELECT value FROM json_each($type)))
         AND ($priority IS NULL OR priority IN (SELECT value FROM json_each($priority)))

@@ -15,6 +15,7 @@ import { IndexingEngine } from './core/indexing-engine.js'
 import { CompactionEngine } from './core/compaction-engine.js'
 import { CoordinationMCPServer } from './mcp/server.js'
 import { validateInput } from './utils/validation.js'
+import { discoverDatabases, suggestBestDatabase, generateFragmentationWarnings, shouldCentralizeCoordination } from './utils/database-discovery.js'
 import {
   CoordinationConfig,
   ParticipantId,
@@ -128,6 +129,58 @@ program
     } catch (error) {
       spinner.fail(chalk.red('❌ Failed to initialize'))
       console.error(error)
+      process.exit(1)
+    }
+  })
+
+// Validate coordination setup
+program
+  .command('validate')
+  .description('Validate coordination setup and detect fragmentation')
+  .action(async () => {
+    console.log(chalk.blue('🔍 Validating coordination setup...'))
+    
+    try {
+      const currentDir = process.cwd()
+      const databases = await discoverDatabases(currentDir)
+      const warnings = generateFragmentationWarnings(databases, currentDir)
+      const bestDatabase = suggestBestDatabase(databases)
+      
+      console.log(chalk.blue(`\n📊 Found ${databases.length} coordination database(s):`))
+      
+      for (const [index, db] of databases.entries()) {
+        const indicator = bestDatabase === db ? '🎯' : index === 0 ? '🟢' : '⚠️'
+        const relativePath = path.relative(currentDir, db.path)
+        
+        console.log(`${indicator} ${relativePath}`)
+        console.log(`   Type: ${db.type}, Participants: ${db.participantCount}, Distance: ${db.distance}`)
+        if (db.lastActivity) {
+          console.log(`   Last activity: ${db.lastActivity.toLocaleDateString()}`)
+        }
+      }
+      
+      if (warnings.length > 0) {
+        console.log(chalk.yellow('\n⚠️  Warnings:'))
+        warnings.forEach(warning => console.log(warning))
+      }
+      
+      if (bestDatabase) {
+        const recommendedPath = path.relative(currentDir, path.dirname(bestDatabase.path))
+        console.log(chalk.green(`\n✅ Recommended database: ${recommendedPath}`))
+        
+        if (databases.length > 1) {
+          console.log(chalk.blue('\n💡 To fix fragmentation:'))
+          console.log(`1. Work from: ${chalk.cyan(path.dirname(bestDatabase.path))}`)
+          console.log(`2. Configure MCP to use: ${chalk.cyan(bestDatabase.path)}`)
+          console.log(`3. Run: ${chalk.cyan('ccp migrate')} to consolidate messages`)
+        }
+      } else {
+        console.log(chalk.yellow('\n⚠️  No coordination databases found'))
+        console.log(`Run: ${chalk.green('ccp init')} to initialize coordination`)
+      }
+      
+    } catch (error) {
+      console.error(chalk.red('Validation failed:'), error)
       process.exit(1)
     }
   })

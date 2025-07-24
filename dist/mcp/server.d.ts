@@ -15,11 +15,11 @@ export declare class CoordinationMCPServer {
     private handleSearchMessages;
     private handleCompactThread;
     private handleArchiveResolved;
-    private handleGetStats;
     private handleRegisterParticipant;
     private handleWhoami;
     private handleHelp;
     private handleSetupGuide;
+    private handleGetStats;
     private setupErrorHandling;
     private handleToolError;
     run(): Promise<void>;

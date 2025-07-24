@@ -397,6 +397,26 @@ export class CoordinationMCPServer {
         },
         
         {
+          name: 'ccp_get_stats',
+          description: 'Get coordination system statistics and analytics',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              timeframe_days: {
+                type: 'number',
+                default: 7,
+                description: 'Number of days to analyze (default: 7)'
+              },
+              include_participants: {
+                type: 'boolean',
+                default: false,
+                description: 'Include per-participant statistics'
+              }
+            }
+          }
+        },
+        
+        {
           name: 'ccp_setup_guide',
           description: 'Get setup and configuration guide for Claude Coordination Protocol',
           inputSchema: {
@@ -647,34 +667,6 @@ export class CoordinationMCPServer {
     }
   }
   
-  private async handleGetStats(args: unknown): Promise<any> {
-    const participant = (args as any)?.participant || this.config.participant_id
-    const timeframeDays = (args as any)?.timeframe_days || 7
-    
-    const stats = await this.indexingEngine.getMessageStats(participant, timeframeDays)
-    const participantStats = await this.participantRegistry.getParticipantStats()
-    
-    return {
-      content: [
-        {
-          type: 'text',
-          text: `📊 **Coordination Statistics (Last ${timeframeDays} days)**\n\n` +
-               `**Messages:**\n` +
-               `• Total: ${stats.total_messages}\n` +
-               `• Sent: ${stats.messages_sent}\n` +
-               `• Received: ${stats.messages_received}\n` +
-               `• Response Rate: ${Math.round(stats.response_rate * 100)}%\n` +
-               `• Avg Response Time: ${Math.round(stats.avg_response_time_hours)}h\n\n` +
-               `**By Type:** ${Object.entries(stats.by_type).map(([k, v]) => `${k}: ${v}`).join(', ')}\n` +
-               `**By Priority:** ${Object.entries(stats.by_priority).map(([k, v]) => `${k}: ${v}`).join(', ')}\n\n` +
-               `**Participants:**\n` +
-               `• Total: ${participantStats.total}\n` +
-               `• Active: ${participantStats.active}\n` +
-               `• Inactive: ${participantStats.inactive}`
-        }
-      ]
-    }
-  }
   
   private async handleRegisterParticipant(args: unknown): Promise<any> {
     const input = args as any
@@ -1047,6 +1039,153 @@ export class CoordinationMCPServer {
     }
   }
   
+  private async handleGetStats(args: unknown): Promise<any> {
+    try {
+      const input = args as { timeframe_days?: number; include_participants?: boolean }
+      const timeframeDays = input.timeframe_days || 7
+      
+      // Get basic statistics
+      const cutoffDate = new Date()
+      cutoffDate.setDate(cutoffDate.getDate() - timeframeDays)
+      
+      // Get message statistics - using simple queries instead of JSON path
+      const messageStats = this.db.prepare(`
+        SELECT 
+          COUNT(*) as total_messages,
+          COUNT(CASE WHEN created_at >= ? THEN 1 END) as recent_messages,
+          COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_messages,
+          COUNT(CASE WHEN status = 'read' THEN 1 END) as read_messages,
+          COUNT(CASE WHEN status = 'responded' THEN 1 END) as responded_messages
+        FROM messages
+      `).get(cutoffDate.toISOString()) as any
+      
+      // Get message type distribution
+      const typeStats = this.db.prepare(`
+        SELECT 
+          type,
+          COUNT(*) as count
+        FROM messages 
+        WHERE created_at >= ? 
+        GROUP BY type 
+        ORDER BY count DESC
+      `).all(cutoffDate.toISOString()) as any[]
+      
+      // Get priority distribution
+      const priorityStats = this.db.prepare(`
+        SELECT 
+          priority,
+          COUNT(*) as count
+        FROM messages 
+        WHERE created_at >= ? 
+        GROUP BY priority 
+        ORDER BY 
+          CASE priority 
+            WHEN 'CRITICAL' THEN 1 
+            WHEN 'H' THEN 2 
+            WHEN 'M' THEN 3 
+            WHEN 'L' THEN 4 
+          END
+      `).all(cutoffDate.toISOString()) as any[]
+      
+      // Get participant statistics if requested
+      let participantStats = []
+      if (input.include_participants) {
+        participantStats = this.db.prepare(`
+          SELECT 
+            participant_id,
+            status,
+            last_seen,
+            (SELECT COUNT(*) FROM messages WHERE "from" = participant_id AND created_at >= ?) as messages_sent,
+            (SELECT COUNT(*) FROM messages WHERE "to" LIKE '%' || participant_id || '%' AND created_at >= ?) as messages_received
+          FROM participants
+          ORDER BY last_seen DESC
+        `).all(cutoffDate.toISOString(), cutoffDate.toISOString()) as any[]
+      }
+      
+      // Calculate activity metrics
+      const totalThreads = this.db.prepare(`
+        SELECT COUNT(DISTINCT thread_id) as count FROM messages WHERE created_at >= ?
+      `).get(cutoffDate.toISOString()) as any
+      
+      const avgResponseTime = this.db.prepare(`
+        SELECT AVG(
+          (julianday(updated_at) - julianday(created_at)) * 24 * 60 * 60
+        ) as avg_seconds
+        FROM messages 
+        WHERE status = 'responded' 
+        AND created_at >= ?
+      `).get(cutoffDate.toISOString()) as any
+      
+      // Format results
+      const results = {
+        timeframe: `${timeframeDays} days`,
+        period: `${cutoffDate.toISOString().split('T')[0]} to ${new Date().toISOString().split('T')[0]}`,
+        message_statistics: {
+          total_messages: messageStats.total_messages,
+          recent_messages: messageStats.recent_messages,
+          pending_messages: messageStats.pending_messages,
+          read_messages: messageStats.read_messages,
+          responded_messages: messageStats.responded_messages,
+          response_rate: messageStats.recent_messages > 0 
+            ? Math.round((messageStats.responded_messages / messageStats.recent_messages) * 100) 
+            : 0
+        },
+        activity_metrics: {
+          active_threads: totalThreads.count,
+          avg_response_time_hours: avgResponseTime.avg_seconds 
+            ? Math.round(avgResponseTime.avg_seconds / 3600 * 100) / 100 
+            : null
+        },
+        message_types: typeStats.map(t => ({ type: t.type, count: t.count })),
+        priorities: priorityStats.map(p => ({ priority: p.priority, count: p.count })),
+        participants: input.include_participants ? participantStats : undefined
+      }
+      
+      // Format output
+      let output = `📊 **Coordination Statistics (${results.timeframe})**\n\n`
+      
+      output += `**Message Overview:**\n`
+      output += `• Total Messages: ${results.message_statistics.total_messages}\n`
+      output += `• Recent Messages: ${results.message_statistics.recent_messages}\n`
+      output += `• Response Rate: ${results.message_statistics.response_rate}%\n`
+      output += `• Active Threads: ${results.activity_metrics.active_threads}\n`
+      
+      if (results.activity_metrics.avg_response_time_hours) {
+        output += `• Avg Response Time: ${results.activity_metrics.avg_response_time_hours}h\n`
+      }
+      
+      output += `\n**Message Types:**\n`
+      results.message_types.forEach(t => {
+        output += `• ${t.type}: ${t.count}\n`
+      })
+      
+      output += `\n**Priorities:**\n`
+      results.priorities.forEach(p => {
+        output += `• ${p.priority}: ${p.count}\n`
+      })
+      
+      if (results.participants) {
+        output += `\n**Participants:**\n`
+        results.participants.forEach((p: any) => {
+          const lastSeen = p.last_seen ? new Date(p.last_seen).toLocaleDateString() : 'never'
+          output += `• ${p.participant_id} (${p.status}): ${p.messages_sent} sent, ${p.messages_received} received, last seen ${lastSeen}\n`
+        })
+      }
+      
+      return {
+        content: [
+          {
+            type: 'text',
+            text: output
+          }
+        ]
+      }
+      
+    } catch (error) {
+      throw new DatabaseError(`Failed to get message statistics: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
+  }
+
   private setupErrorHandling(): void {
     this.server.onerror = (error) => {
       console.error('[MCP Server Error]', error)
