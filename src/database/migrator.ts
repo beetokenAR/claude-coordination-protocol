@@ -191,6 +191,21 @@ export class DatabaseMigrator {
    */
   async migrate(): Promise<void> {
     try {
+      // First check if we need special handling for version 2
+      const currentVersion = this.getCurrentVersion()
+      
+      if (currentVersion === 1) {
+        // Check if suggested_approach column already exists
+        const columns = this.db.pragma('table_info(messages)') as any[]
+        const hasColumn = columns.some(col => col.name === 'suggested_approach')
+        
+        if (hasColumn) {
+          // Column already exists, just update the version
+          console.log('suggested_approach column already exists, updating version to 2')
+          this.db.pragma('user_version = 2')
+        }
+      }
+      
       const migrations = this.getMigrations()
       
       // Use better-sqlite3-migrations
