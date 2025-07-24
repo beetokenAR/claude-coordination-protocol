@@ -27,10 +27,6 @@ export class CoordinationDatabase {
     try {
       fs.mkdirSync(this.dataDir, { recursive: true, mode: 0o755 })
       
-      // Ensure locks directory exists
-      const locksDir = path.join(this.dataDir, 'locks')
-      fs.mkdirSync(locksDir, { recursive: true, mode: 0o755 })
-      
       // Ensure messages directory exists
       const messagesDir = path.join(this.dataDir, 'messages')
       fs.mkdirSync(messagesDir, { recursive: true, mode: 0o755 })
@@ -58,6 +54,10 @@ export class CoordinationDatabase {
       db.pragma('cache_size = 10000')
       db.pragma('foreign_keys = ON')
       db.pragma('temp_store = memory')
+      
+      // Set busy timeout to 10 seconds for concurrent access
+      // This replaces the file locking mechanism
+      db.pragma('busy_timeout = 10000')
       
       return db
       

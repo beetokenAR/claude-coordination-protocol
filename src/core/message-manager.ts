@@ -4,7 +4,6 @@ import fs from 'fs/promises'
 import path from 'path'
 
 import { CoordinationDatabase } from '../database/connection.js'
-import { withFileLock } from '../utils/file-lock.js'
 import { validateInput, validateMessageId, validateNoCycles } from '../utils/validation.js'
 import {
   CoordinationMessage,
@@ -88,83 +87,81 @@ export class MessageManager {
   ): Promise<CoordinationMessage> {
     const validated = validateInput(SendMessageInput, input, 'create message')
     
-    return withFileLock(this.dataDir, async () => {
-      const messageId = this.generateMessageId(validated.type)
-      const threadId = this.generateThreadId(messageId)
-      const now = new Date()
-      const expiresAt = validated.expires_in_hours 
-        ? addHours(now, validated.expires_in_hours)
-        : undefined
+    const messageId = this.generateMessageId(validated.type)
+    const threadId = this.generateThreadId(messageId)
+    const now = new Date()
+    const expiresAt = validated.expires_in_hours 
+      ? addHours(now, validated.expires_in_hours)
+      : undefined
+    
+    // Validate dependencies don't create cycles
+    if (validated.tags?.some(tag => tag.startsWith('depends:'))) {
+      const dependencies = validated.tags
+        .filter(tag => tag.startsWith('depends:'))
+        .map(tag => tag.substring(8))
       
-      // Validate dependencies don't create cycles
-      if (validated.tags?.some(tag => tag.startsWith('depends:'))) {
-        const dependencies = validated.tags
-          .filter(tag => tag.startsWith('depends:'))
-          .map(tag => tag.substring(8))
-        
-        validateNoCycles(messageId, dependencies, (id: string) => {
-          const result = this.selectMessageDependencies.get(id) as { dependencies: string } | undefined
-          return result ? JSON.parse(result.dependencies) : []
-        })
-      }
-      
-      // Store detailed content in file if large
-      let contentRef: string | undefined
-      if (validated.content.length > 1000) {
-        contentRef = await this.storeMessageContent(threadId, messageId, validated.content)
-      }
-      
-      const message: CoordinationMessage = {
-        id: messageId,
-        thread_id: threadId,
-        from: fromParticipant,
-        to: validated.to,
-        type: validated.type,
-        priority: validated.priority,
-        status: 'pending',
-        subject: validated.subject,
-        summary: validated.content.length > 500 
-          ? validated.content.substring(0, 500) + '...'
-          : validated.content,
-        content_ref: contentRef,
-        created_at: now,
-        updated_at: now,
-        expires_at: expiresAt,
-        response_required: validated.response_required,
-        dependencies: validated.tags?.filter(tag => tag.startsWith('depends:')).map(tag => tag.substring(8)) ?? [],
-        tags: validated.tags?.filter(tag => !tag.startsWith('depends:')) ?? [],
-        suggested_approach: validated.suggested_approach
-      }
-      
-      // Insert into database
-      this.db.transaction(() => {
-        this.insertMessage.run(
-          message.id,
-          message.thread_id,
-          message.from,
-          JSON.stringify(message.to),
-          message.type,
-          message.priority,
-          message.status,
-          message.subject,
-          message.summary,
-          message.content_ref,
-          message.created_at.toISOString(),
-          message.updated_at.toISOString(),
-          message.expires_at?.toISOString(),
-          message.response_required ? 1 : 0,
-          JSON.stringify(message.dependencies),
-          JSON.stringify(message.tags),
-          null, // semantic_vector will be added later by indexing system
-          message.suggested_approach ? JSON.stringify(message.suggested_approach) : null
-        )
-        
-        // Update or create conversation thread
-        this.updateConversationThread(message)
+      validateNoCycles(messageId, dependencies, (id: string) => {
+        const result = this.selectMessageDependencies.get(id) as { dependencies: string } | undefined
+        return result ? JSON.parse(result.dependencies) : []
       })
+    }
+    
+    // Store detailed content in file if large
+    let contentRef: string | undefined
+    if (validated.content.length > 1000) {
+      contentRef = await this.storeMessageContent(threadId, messageId, validated.content)
+    }
+    
+    const message: CoordinationMessage = {
+      id: messageId,
+      thread_id: threadId,
+      from: fromParticipant,
+      to: validated.to,
+      type: validated.type,
+      priority: validated.priority,
+      status: 'pending',
+      subject: validated.subject,
+      summary: validated.content.length > 500 
+        ? validated.content.substring(0, 500) + '...'
+        : validated.content,
+      content_ref: contentRef,
+      created_at: now,
+      updated_at: now,
+      expires_at: expiresAt,
+      response_required: validated.response_required,
+      dependencies: validated.tags?.filter(tag => tag.startsWith('depends:')).map(tag => tag.substring(8)) ?? [],
+      tags: validated.tags?.filter(tag => !tag.startsWith('depends:')) ?? [],
+      suggested_approach: validated.suggested_approach
+    }
+    
+    // Insert into database
+    this.db.transaction(() => {
+      this.insertMessage.run(
+        message.id,
+        message.thread_id,
+        message.from,
+        JSON.stringify(message.to),
+        message.type,
+        message.priority,
+        message.status,
+        message.subject,
+        message.summary,
+        message.content_ref,
+        message.created_at.toISOString(),
+        message.updated_at.toISOString(),
+        message.expires_at?.toISOString(),
+        message.response_required ? 1 : 0,
+        JSON.stringify(message.dependencies),
+        JSON.stringify(message.tags),
+        null, // semantic_vector will be added later by indexing system
+        message.suggested_approach ? JSON.stringify(message.suggested_approach) : null
+      )
       
-      return message
+      // Update or create conversation thread
+      this.updateConversationThread(message)
     })
+    
+    return message
   }
   
   /**
@@ -244,48 +241,46 @@ export class MessageManager {
   ): Promise<CoordinationMessage> {
     const validated = validateInput(RespondMessageInput, input, 'respond to message')
     
-    return withFileLock(this.dataDir, async () => {
-      // Get original message
-      const originalMessage = await this.getMessageById(
-        validated.message_id, 
-        respondingParticipant,
-        'full'
-      )
+    // Get original message
+    const originalMessage = await this.getMessageById(
+      validated.message_id, 
+      respondingParticipant,
+      'full'
+    )
+    
+    if (!originalMessage) {
+      throw new ValidationError(`Message not found: ${validated.message_id}`)
+    }
+    
+    // Check if participant is authorized to respond
+    if (!originalMessage.to.includes(respondingParticipant)) {
+      throw new ValidationError('Access denied: not authorized to respond to this message')
+    }
+    
+    // Create response message
+    const responseMessage = await this.createMessage({
+      to: [originalMessage.from],
+      type: originalMessage.type,
+      priority: originalMessage.priority,
+      subject: `Re: ${originalMessage.subject}`,
+      content: validated.content,
+      response_required: false,
+      expires_in_hours: 168, // 1 week default
+      tags: [`response_to:${validated.message_id}`]
+    }, respondingParticipant)
+    
+    // Update original message status
+    const now = new Date()
+    this.updateMessage.run(
+      'responded',
+      now.toISOString(),
+      validated.resolution_status,
+      validated.resolution_status ? now.toISOString() : null,
+      validated.resolution_status ? respondingParticipant : null,
+      validated.message_id
+    )
       
-      if (!originalMessage) {
-        throw new ValidationError(`Message not found: ${validated.message_id}`)
-      }
-      
-      // Check if participant is authorized to respond
-      if (!originalMessage.to.includes(respondingParticipant)) {
-        throw new ValidationError('Access denied: not authorized to respond to this message')
-      }
-      
-      // Create response message
-      const responseMessage = await this.createMessage({
-        to: [originalMessage.from],
-        type: originalMessage.type,
-        priority: originalMessage.priority,
-        subject: `Re: ${originalMessage.subject}`,
-        content: validated.content,
-        response_required: false,
-        expires_in_hours: 168, // 1 week default
-        tags: [`response_to:${validated.message_id}`]
-      }, respondingParticipant)
-      
-      // Update original message status
-      const now = new Date()
-      this.updateMessage.run(
-        'responded',
-        now.toISOString(),
-        validated.resolution_status,
-        validated.resolution_status ? now.toISOString() : null,
-        validated.resolution_status ? respondingParticipant : null,
-        validated.message_id
-      )
-      
-      return responseMessage
-    })
+    return responseMessage
   }
   
   /**
@@ -298,68 +293,64 @@ export class MessageManager {
   ): Promise<void> {
     validateMessageId(messageId)
     
-    return withFileLock(this.dataDir, async () => {
-      const message = await this.getMessageById(messageId, resolvingParticipant)
-      if (!message) {
-        throw new ValidationError(`Message not found: ${messageId}`)
-      }
-      
-      // Check authorization
-      if (!message.to.includes(resolvingParticipant) && message.from !== resolvingParticipant) {
-        throw new ValidationError('Access denied: not authorized to resolve this message')
-      }
-      
-      const now = new Date()
-      this.updateMessage.run(
-        'resolved',
-        now.toISOString(),
-        resolutionStatus,
-        now.toISOString(),
-        resolvingParticipant,
-        messageId
-      )
-    })
+    const message = await this.getMessageById(messageId, resolvingParticipant)
+    if (!message) {
+      throw new ValidationError(`Message not found: ${messageId}`)
+    }
+    
+    // Check authorization
+    if (!message.to.includes(resolvingParticipant) && message.from !== resolvingParticipant) {
+      throw new ValidationError('Access denied: not authorized to resolve this message')
+    }
+    
+    const now = new Date()
+    this.updateMessage.run(
+      'resolved',
+      now.toISOString(),
+      resolutionStatus,
+      now.toISOString(),
+      resolvingParticipant,
+      messageId
+    )
   }
   
   /**
    * Archive expired messages
    */
   async archiveExpiredMessages(): Promise<number> {
-    return withFileLock(this.dataDir, async () => {
-      const now = new Date()
+    const now = new Date()
+    
+    // Find expired messages
+    const expiredMessages = this.db.prepare(`
+      SELECT id, content_ref FROM messages 
+      WHERE expires_at IS NOT NULL 
+      AND expires_at < ? 
+      AND status NOT IN ('resolved', 'archived')
+    `).all(now.toISOString()) as Array<{ id: string, content_ref?: string }>
+    
+    if (expiredMessages.length === 0) {
+      return 0
+    }
+    
+    // Archive messages
+    this.db.transaction(() => {
+      const archiveMessage = this.db.prepare(`
+        UPDATE messages SET status = 'archived', updated_at = ? WHERE id = ?
+      `)
       
-      // Find expired messages
-      const expiredMessages = this.db.prepare(`
-        SELECT id, content_ref FROM messages 
-        WHERE expires_at IS NOT NULL 
-        AND expires_at < ? 
-        AND status NOT IN ('resolved', 'archived')
-      `).all(now.toISOString()) as Array<{ id: string, content_ref?: string }>
-      
-      if (expiredMessages.length === 0) {
-        return 0
-      }
-      
-      // Archive messages
-      this.db.transaction(() => {
-        const archiveMessage = this.db.prepare(`
-          UPDATE messages SET status = 'archived', updated_at = ? WHERE id = ?
-        `)
+      for (const message of expiredMessages) {
+        archiveMessage.run(now.toISOString(), message.id)
         
-        for (const message of expiredMessages) {
-          archiveMessage.run(now.toISOString(), message.id)
-          
-          // Move content file to archive if it exists
-          if (message.content_ref) {
-            this.archiveContentFile(message.content_ref).catch(error => {
-              console.warn(`Failed to archive content file ${message.content_ref}:`, error)
-            })
-          }
+        // Move content file to archive if it exists
+        if (message.content_ref) {
+          this.archiveContentFile(message.content_ref).catch(error => {
+            console.warn(`Failed to archive content file ${message.content_ref}:`, error)
+          })
         }
-      })
-      
-      return expiredMessages.length
+      }
     })
+      
+    return expiredMessages.length
   }
   
   private generateMessageId(type: MessageType): string {

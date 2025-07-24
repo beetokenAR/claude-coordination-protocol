@@ -3,7 +3,6 @@ import path from 'path'
 import { format } from 'date-fns'
 
 import { CoordinationDatabase } from '../database/connection.js'
-import { withFileLock } from '../utils/file-lock.js'
 import { validateInput } from '../utils/validation.js'
 import {
   CompactThreadInput,
@@ -74,54 +73,52 @@ export class CompactionEngine {
       preserve_critical: rawValidated.preserve_critical ?? true
     }
     
-    return withFileLock(this.dataDir, async () => {
-      // Get all messages in the thread
-      const messages = this.selectThreadMessages.all(validated.thread_id) as any[]
-      
-      if (messages.length === 0) {
-        throw new ValidationError(`Thread not found: ${validated.thread_id}`)
-      }
-      
-      // Check permissions - requesting participant must be involved in the thread
-      const participantIds = new Set<string>()
-      for (const msg of messages) {
-        participantIds.add(msg.from_participant)
-        const toParticipants = JSON.parse(msg.to_participants)
-        toParticipants.forEach((id: string) => participantIds.add(id))
-      }
-      
-      if (!participantIds.has(requestingParticipant)) {
-        throw new ValidationError('Access denied: not authorized to compact this thread')
-      }
-      
-      const originalSizeBytes = await this.calculateThreadSize(validated.thread_id)
-      
-      let compactionResult: CompactionResult
-      
-      switch (validated.strategy) {
-        case 'summarize':
-          compactionResult = await this.summarizeThread(messages, validated)
-          break
-          
-        case 'consolidate':
-          compactionResult = await this.consolidateThread(messages, validated)
-          break
-          
-        case 'archive':
-          compactionResult = await this.archiveThread(messages, validated)
-          break
-          
-        default:
-          throw new ValidationError(`Unknown compaction strategy: ${validated.strategy}`)
-      }
-      
-      const finalSizeBytes = await this.calculateThreadSize(validated.thread_id)
-      
-      return {
-        ...compactionResult,
-        space_saved_bytes: originalSizeBytes - finalSizeBytes
-      }
-    })
+    // Get all messages in the thread
+    const messages = this.selectThreadMessages.all(validated.thread_id) as any[]
+    
+    if (messages.length === 0) {
+      throw new ValidationError(`Thread not found: ${validated.thread_id}`)
+    }
+    
+    // Check permissions - requesting participant must be involved in the thread
+    const participantIds = new Set<string>()
+    for (const msg of messages) {
+      participantIds.add(msg.from_participant)
+      const toParticipants = JSON.parse(msg.to_participants)
+      toParticipants.forEach((id: string) => participantIds.add(id))
+    }
+    
+    if (!participantIds.has(requestingParticipant)) {
+      throw new ValidationError('Access denied: not authorized to compact this thread')
+    }
+    
+    const originalSizeBytes = await this.calculateThreadSize(validated.thread_id)
+    
+    let compactionResult: CompactionResult
+    
+    switch (validated.strategy) {
+      case 'summarize':
+        compactionResult = await this.summarizeThread(messages, validated)
+        break
+        
+      case 'consolidate':
+        compactionResult = await this.consolidateThread(messages, validated)
+        break
+        
+      case 'archive':
+        compactionResult = await this.archiveThread(messages, validated)
+        break
+        
+      default:
+        throw new ValidationError(`Unknown compaction strategy: ${validated.strategy}`)
+    }
+    
+    const finalSizeBytes = await this.calculateThreadSize(validated.thread_id)
+    
+    return {
+      ...compactionResult,
+      space_saved_bytes: originalSizeBytes - finalSizeBytes
+    }
   }
   
   /**
@@ -134,30 +131,28 @@ export class CompactionEngine {
     const cutoffDate = new Date()
     cutoffDate.setDate(cutoffDate.getDate() - olderThanDays)
     
-    return withFileLock(this.dataDir, async () => {
-      // Find old resolved conversations
-      const oldThreads = this.db.prepare(`
-        SELECT thread_id FROM conversations 
-        WHERE status = 'resolved' 
-        AND last_activity < ?
-      `).all(cutoffDate.toISOString()) as Array<{ thread_id: string }>
-      
-      const results: CompactionResult[] = []
-      
-      for (const { thread_id } of oldThreads) {
-        try {
-          const result = await this.compactThread(
-            { thread_id, strategy, preserve_decisions: true, preserve_critical: true },
-            '@system' as ParticipantId // System-initiated compaction
-          )
-          results.push(result)
-        } catch (error) {
-          console.warn(`Failed to compact thread ${thread_id}:`, error)
-        }
+    // Find old resolved conversations
+    const oldThreads = this.db.prepare(`
+      SELECT thread_id FROM conversations 
+      WHERE status = 'resolved' 
+      AND last_activity < ?
+    `).all(cutoffDate.toISOString()) as Array<{ thread_id: string }>
+    
+    const results: CompactionResult[] = []
+    
+    for (const { thread_id } of oldThreads) {
+      try {
+        const result = await this.compactThread(
+          { thread_id, strategy, preserve_decisions: true, preserve_critical: true },
+          '@system' as ParticipantId // System-initiated compaction
+        )
+        results.push(result)
+      } catch (error) {
+        console.warn(`Failed to compact thread ${thread_id}:`, error)
       }
-      
-      return results
-    })
+    }
+    
+    return results
   }
   
   /**

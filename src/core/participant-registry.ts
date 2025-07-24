@@ -1,5 +1,4 @@
 import { CoordinationDatabase } from '../database/connection.js'
-import { withFileLock } from '../utils/file-lock.js'
 import { validateInput, validateParticipantId } from '../utils/validation.js'
 import {
   Participant,
@@ -65,35 +64,33 @@ export class ParticipantRegistry {
       'register participant'
     )
     
-    return withFileLock(this.dataDir, async () => {
-      // Check if participant already exists
-      const existing = this.selectParticipant.get(validated.id) as ParticipantRow | undefined
-      if (existing) {
-        throw new ValidationError(`Participant already exists: ${validated.id}`)
-      }
-      
-      const now = new Date().toISOString()
-      const newParticipant: Participant = {
-        id: validated.id,
-        capabilities: validated.capabilities,
-        last_seen: new Date(),
-        status: 'active' as const,
-        preferences: validated.preferences,
-        default_priority: validated.default_priority ?? 'M'
-      }
-      
-      // Insert into database
-      this.insertParticipant.run(
-        newParticipant.id,
-        JSON.stringify(newParticipant.capabilities),
-        now,
-        newParticipant.status,
-        JSON.stringify(newParticipant.preferences || {}),
-        newParticipant.default_priority
-      )
-      
-      return newParticipant
-    })
+    // Check if participant already exists
+    const existing = this.selectParticipant.get(validated.id) as ParticipantRow | undefined
+    if (existing) {
+      throw new ValidationError(`Participant already exists: ${validated.id}`)
+    }
+    
+    const now = new Date().toISOString()
+    const newParticipant: Participant = {
+      id: validated.id,
+      capabilities: validated.capabilities,
+      last_seen: new Date(),
+      status: 'active' as const,
+      preferences: validated.preferences,
+      default_priority: validated.default_priority ?? 'M'
+    }
+    
+    // Insert into database
+    this.insertParticipant.run(
+      newParticipant.id,
+      JSON.stringify(newParticipant.capabilities),
+      now,
+      newParticipant.status,
+      JSON.stringify(newParticipant.preferences || {}),
+      newParticipant.default_priority
+    )
+    
+    return newParticipant
   }
   
   /**
@@ -136,30 +133,28 @@ export class ParticipantRegistry {
       throw new PermissionError(`Not authorized to update participant: ${participantId}`)
     }
     
-    return withFileLock(this.dataDir, async () => {
-      const existing = await this.getParticipant(participantId)
-      if (!existing) {
-        throw new ValidationError(`Participant not found: ${participantId}`)
-      }
-      
-      const updated: Participant = {
-        ...existing,
-        ...updates
-      }
-      
-      // Validate the updated participant
-      const validated = validateInput(Participant, updated, 'update participant')
-      
-      this.updateParticipantStmt.run(
-        JSON.stringify(validated.capabilities),
-        validated.status,
-        JSON.stringify(validated.preferences || {}),
-        validated.default_priority,
-        validated.id
-      )
-      
-      return validated
-    })
+    const existing = await this.getParticipant(participantId)
+    if (!existing) {
+      throw new ValidationError(`Participant not found: ${participantId}`)
+    }
+    
+    const updated: Participant = {
+      ...existing,
+      ...updates
+    }
+    
+    // Validate the updated participant
+    const validated = validateInput(Participant, updated, 'update participant')
+    
+    this.updateParticipantStmt.run(
+      JSON.stringify(validated.capabilities),
+      validated.status,
+      JSON.stringify(validated.preferences || {}),
+      validated.default_priority,
+      validated.id
+    )
+    
+    return validated
   }
   
   /**
@@ -208,23 +203,21 @@ export class ParticipantRegistry {
       throw new PermissionError('Only admins can permanently remove participants')
     }
     
-    return withFileLock(this.dataDir, async () => {
-      // Check if participant has active messages
-      const hasActiveMessages = this.db.prepare(`
-        SELECT COUNT(*) as count FROM messages 
-        WHERE (from_participant = ? OR to_participants LIKE '%"' || ? || '"%')
-        AND status IN ('pending', 'read', 'responded')
-      `).get(participantId, participantId) as { count: number }
-      
-      if (hasActiveMessages.count > 0) {
-        throw new ValidationError(
-          `Cannot remove participant with active messages: ${participantId}`,
-          { activeMessageCount: hasActiveMessages.count }
-        )
-      }
-      
-      this.deleteParticipant.run(participantId)
-    })
+    // Check if participant has active messages
+    const hasActiveMessages = this.db.prepare(`
+      SELECT COUNT(*) as count FROM messages 
+      WHERE (from_participant = ? OR to_participants LIKE '%"' || ? || '"%')
+      AND status IN ('pending', 'read', 'responded')
+    `).get(participantId, participantId) as { count: number }
+    
+    if (hasActiveMessages.count > 0) {
+      throw new ValidationError(
+        `Cannot remove participant with active messages: ${participantId}`,
+        { activeMessageCount: hasActiveMessages.count }
+      )
+    }
+    
+    this.deleteParticipant.run(participantId)
   }
   
   /**
@@ -345,26 +338,24 @@ export class ParticipantRegistry {
     const cutoffDate = new Date()
     cutoffDate.setDate(cutoffDate.getDate() - daysInactive)
     
-    return withFileLock(this.dataDir, async () => {
-      const staleParticipants = this.db.prepare(`
-        SELECT id FROM participants 
-        WHERE status = 'inactive' 
-        AND (last_seen IS NULL OR last_seen < ?)
-      `).all(cutoffDate.toISOString()) as Array<{ id: string }>
-      
-      if (staleParticipants.length === 0) {
-        return 0
+    const staleParticipants = this.db.prepare(`
+      SELECT id FROM participants 
+      WHERE status = 'inactive' 
+      AND (last_seen IS NULL OR last_seen < ?)
+    `).all(cutoffDate.toISOString()) as Array<{ id: string }>
+    
+    if (staleParticipants.length === 0) {
+      return 0
+    }
+    
+    // Remove stale participants
+    this.db.transaction(() => {
+      for (const { id } of staleParticipants) {
+        this.deleteParticipant.run(id)
       }
-      
-      // Remove stale participants
-      this.db.transaction(() => {
-        for (const { id } of staleParticipants) {
-          this.deleteParticipant.run(id)
-        }
-      })
-      
-      return staleParticipants.length
     })
+    
+    return staleParticipants.length
   }
   
   private rowToParticipant(row: ParticipantRow): Participant {
