@@ -15,7 +15,11 @@ import { IndexingEngine } from './core/indexing-engine.js'
 import { CompactionEngine } from './core/compaction-engine.js'
 import { CoordinationMCPServer } from './mcp/server.js'
 import { validateInput } from './utils/validation.js'
-import { discoverDatabases, suggestBestDatabase, generateFragmentationWarnings } from './utils/database-discovery.js'
+import {
+  discoverDatabases,
+  suggestBestDatabase,
+  generateFragmentationWarnings,
+} from './utils/database-discovery.js'
 import { createMigrateCommand } from './cli/commands/migrate.js'
 import {
   CoordinationConfig,
@@ -24,38 +28,40 @@ import {
   GetMessagesInput,
   SearchMessagesInput,
   CompactThreadInput,
-  Priority
+  Priority,
 } from './types/index.js'
 
 const program = new Command()
 
 // Read version from package.json
-const packageJson = JSON.parse(await fs.readFile(new URL('../package.json', import.meta.url), 'utf-8'))
+const packageJson = JSON.parse(
+  await fs.readFile(new URL('../package.json', import.meta.url), 'utf-8')
+)
 
 program
   .name('ccp')
   .description('Claude Coordination Protocol - Inter-Claude communication system')
   .version(packageJson.version)
 
-// Initialize project
+// Initialize project (creates new coordination system)
 program
   .command('init')
-  .description('Initialize coordination system in current directory')
+  .description('Initialize NEW coordination system in current directory')
   .option('--participant-id <id>', 'Participant ID (e.g., @backend)', '@claude')
   .option('--local', 'Initialize for local project only')
-  .action(async (options) => {
+  .action(async options => {
     const spinner = ora('Initializing coordination system...').start()
-    
+
     try {
       const dataDir = '.coordination'
       const configPath = path.join(dataDir, 'config.yaml')
-      
+
       // Create directories
       await fs.mkdir(dataDir, { recursive: true })
       await fs.mkdir(path.join(dataDir, 'messages', 'active'), { recursive: true })
       await fs.mkdir(path.join(dataDir, 'messages', 'archive'), { recursive: true })
       await fs.mkdir(path.join(dataDir, 'locks'), { recursive: true })
-      
+
       // Create default config
       const config: CoordinationConfig = {
         participant_id: options.participantId as ParticipantId,
@@ -68,67 +74,174 @@ program
             id: options.participantId as ParticipantId,
             capabilities: ['coordination'],
             status: 'active',
-            default_priority: 'M'
-          }
+            default_priority: 'M',
+          },
         ],
         notification_settings: {
           enabled: true,
           priority_threshold: 'M',
-          batch_notifications: true
-        }
+          batch_notifications: true,
+        },
       }
-      
+
       await fs.writeFile(configPath, YAML.stringify(config), 'utf-8')
-      
+
       // Initialize database
       const db = new CoordinationDatabase(dataDir)
       const participantRegistry = new ParticipantRegistry(db, dataDir)
-      
+
       // Register the participant
       await participantRegistry.registerParticipant({
         id: options.participantId as ParticipantId,
         capabilities: ['coordination'],
-        default_priority: 'M'
+        default_priority: 'M',
       })
-      
+
       db.close()
-      
+
       // Create .mcp.json if it doesn't exist
       const mcpConfigPath = '.mcp.json'
       let mcpConfig: any = {}
-      
+
       try {
         const existingConfig = await fs.readFile(mcpConfigPath, 'utf-8')
         mcpConfig = JSON.parse(existingConfig)
       } catch {
         // File doesn't exist, create new one
       }
-      
+
       if (!mcpConfig.mcpServers) {
         mcpConfig.mcpServers = {}
       }
-      
+
       mcpConfig.mcpServers['claude-coordination-protocol'] = {
         command: 'ccp',
         args: ['server'],
         env: {
-          CCP_CONFIG: configPath,
-          CCP_PARTICIPANT_ID: options.participantId
-        }
+          CCP_CONFIG: path.resolve(configPath),
+          CCP_PARTICIPANT_ID: options.participantId,
+        },
       }
-      
+
       await fs.writeFile(mcpConfigPath, JSON.stringify(mcpConfig, null, 2), 'utf-8')
-      
+
       spinner.succeed(chalk.green('✅ Coordination system initialized!'))
-      
+
       console.log(chalk.blue('\n📋 Next steps:'))
       console.log(`• Configuration saved to: ${chalk.yellow(configPath)}`)
       console.log(`• MCP configuration updated: ${chalk.yellow(mcpConfigPath)}`)
       console.log(`• Participant registered: ${chalk.yellow(options.participantId)}`)
       console.log(`• Run ${chalk.cyan('ccp status')} to verify setup`)
-      
     } catch (error) {
       spinner.fail(chalk.red('❌ Failed to initialize'))
+      console.error(error)
+      process.exit(1)
+    }
+  })
+
+// Connect to existing coordination system
+program
+  .command('connect')
+  .description('Connect to existing coordination system (no new database)')
+  .option('--participant-id <id>', 'Participant ID (e.g., @backend)', '@claude')
+  .option(
+    '--db-path <path>',
+    'Path to existing coordination database',
+    '../.coordination/coordination.db'
+  )
+  .action(async options => {
+    const spinner = ora('Connecting to coordination system...').start()
+
+    try {
+      const dataDir = '.coordination'
+      const configPath = path.join(dataDir, 'config.yaml')
+
+      // Only create the .coordination directory as a marker (NO database)
+      await fs.mkdir(dataDir, { recursive: true })
+
+      // Resolve the database path
+      const dbPath = path.resolve(options.dbPath)
+
+      // Verify the database exists
+      try {
+        await fs.access(dbPath)
+      } catch {
+        throw new Error(`Database not found at: ${dbPath}`)
+      }
+
+      // Create config that points to the shared database
+      const config: CoordinationConfig = {
+        participant_id: options.participantId as ParticipantId,
+        data_directory: path.dirname(dbPath), // Points to parent directory
+        archive_days: 30,
+        token_limit: 1000000,
+        auto_compact: true,
+        participants: [
+          {
+            id: options.participantId as ParticipantId,
+            capabilities: ['coordination'],
+            status: 'active',
+            default_priority: 'M',
+          },
+        ],
+        notification_settings: {
+          enabled: true,
+          priority_threshold: 'M',
+          batch_notifications: true,
+        },
+      }
+
+      await fs.writeFile(configPath, YAML.stringify(config), 'utf-8')
+
+      // Connect to existing database and register participant
+      const db = new CoordinationDatabase(path.dirname(dbPath))
+      const participantRegistry = new ParticipantRegistry(db, path.dirname(dbPath))
+
+      // Register the participant in the shared database
+      await participantRegistry.registerParticipant({
+        id: options.participantId as ParticipantId,
+        capabilities: ['coordination'],
+        default_priority: 'M',
+      })
+
+      db.close()
+
+      // Create .mcp.json if it doesn't exist
+      const mcpConfigPath = '.mcp.json'
+      let mcpConfig: any = {}
+
+      try {
+        const existingConfig = await fs.readFile(mcpConfigPath, 'utf-8')
+        mcpConfig = JSON.parse(existingConfig)
+      } catch {
+        // File doesn't exist, create new one
+      }
+
+      if (!mcpConfig.mcpServers) {
+        mcpConfig.mcpServers = {}
+      }
+
+      mcpConfig.mcpServers['claude-coordination-protocol'] = {
+        command: 'ccp',
+        args: ['server'],
+        env: {
+          CCP_CONFIG: path.resolve(configPath),
+          CCP_PARTICIPANT_ID: options.participantId,
+        },
+      }
+
+      await fs.writeFile(mcpConfigPath, JSON.stringify(mcpConfig, null, 2), 'utf-8')
+
+      spinner.succeed(chalk.green('✅ Connected to coordination system!'))
+
+      console.log(chalk.blue('\n📋 Connection details:'))
+      console.log(`• Using database: ${chalk.yellow(dbPath)}`)
+      console.log(`• Configuration saved to: ${chalk.yellow(configPath)}`)
+      console.log(`• MCP configuration updated: ${chalk.yellow(mcpConfigPath)}`)
+      console.log(`• Participant registered: ${chalk.yellow(options.participantId)}`)
+      console.log(`• Run ${chalk.cyan('ccp status')} to verify connection`)
+    } catch (error) {
+      spinner.fail(chalk.red('❌ Failed to connect'))
       console.error(error)
       process.exit(1)
     }
@@ -140,35 +253,37 @@ program
   .description('Validate coordination setup and detect fragmentation')
   .action(async () => {
     console.log(chalk.blue('🔍 Validating coordination setup...'))
-    
+
     try {
       const currentDir = process.cwd()
       const databases = await discoverDatabases(currentDir)
       const warnings = generateFragmentationWarnings(databases, currentDir)
       const bestDatabase = suggestBestDatabase(databases)
-      
+
       console.log(chalk.blue(`\n📊 Found ${databases.length} coordination database(s):`))
-      
+
       for (const [index, db] of databases.entries()) {
         const indicator = bestDatabase === db ? '🎯' : index === 0 ? '🟢' : '⚠️'
         const relativePath = path.relative(currentDir, db.path)
-        
+
         console.log(`${indicator} ${relativePath}`)
-        console.log(`   Type: ${db.type}, Participants: ${db.participantCount}, Distance: ${db.distance}`)
+        console.log(
+          `   Type: ${db.type}, Participants: ${db.participantCount}, Distance: ${db.distance}`
+        )
         if (db.lastActivity) {
           console.log(`   Last activity: ${db.lastActivity.toLocaleDateString()}`)
         }
       }
-      
+
       if (warnings.length > 0) {
         console.log(chalk.yellow('\n⚠️  Warnings:'))
         warnings.forEach(warning => console.log(warning))
       }
-      
+
       if (bestDatabase) {
         const recommendedPath = path.relative(currentDir, path.dirname(bestDatabase.path))
         console.log(chalk.green(`\n✅ Recommended database: ${recommendedPath}`))
-        
+
         if (databases.length > 1) {
           console.log(chalk.blue('\n💡 To fix fragmentation:'))
           console.log(`1. Work from: ${chalk.cyan(path.dirname(bestDatabase.path))}`)
@@ -179,7 +294,6 @@ program
         console.log(chalk.yellow('\n⚠️  No coordination databases found'))
         console.log(`Run: ${chalk.green('ccp init')} to initialize coordination`)
       }
-      
     } catch (error) {
       console.error(chalk.red('Validation failed:'), error)
       process.exit(1)
@@ -191,7 +305,7 @@ program
   .command('setup')
   .description('Interactive setup wizard')
   .option('--participant-id <id>', 'Participant ID')
-  .action(async (options) => {
+  .action(async options => {
     try {
       const answers = await inquirer.prompt([
         {
@@ -199,12 +313,12 @@ program
           name: 'participantId',
           message: 'Enter your participant ID:',
           default: options.participantId || '@claude',
-          validate: (input) => {
+          validate: input => {
             if (!/^@[a-zA-Z][a-zA-Z0-9_-]*$/.test(input)) {
               return 'Participant ID must start with @ followed by alphanumeric characters'
             }
             return true
-          }
+          },
         },
         {
           type: 'checkbox',
@@ -218,8 +332,8 @@ program
             { name: 'Security & Auth', value: 'security' },
             { name: 'Infrastructure', value: 'infrastructure' },
             { name: 'Testing & QA', value: 'testing' },
-            { name: 'Documentation', value: 'documentation' }
-          ]
+            { name: 'Documentation', value: 'documentation' },
+          ],
         },
         {
           type: 'list',
@@ -229,22 +343,21 @@ program
             { name: 'Critical', value: 'CRITICAL' },
             { name: 'High', value: 'H' },
             { name: 'Medium', value: 'M' },
-            { name: 'Low', value: 'L' }
+            { name: 'Low', value: 'L' },
           ],
-          default: 'M'
+          default: 'M',
         },
         {
           type: 'number',
           name: 'archiveDays',
           message: 'Archive messages after how many days?',
           default: 30,
-          validate: (input) => input > 0 || 'Must be greater than 0'
-        }
+          validate: input => input > 0 || 'Must be greater than 0',
+        },
       ])
-      
+
       // Initialize with answers
       await program.parseAsync(['init', '--participant-id', answers.participantId])
-      
     } catch (error) {
       console.error(chalk.red('Setup failed:'), error)
       process.exit(1)
@@ -275,12 +388,12 @@ program
   .option('--priority <priority>', 'Priority level', 'M')
   .option('--subject <subject>', 'Message subject')
   .option('--content <content>', 'Message content')
-  .action(async (options) => {
+  .action(async options => {
     try {
       const config = await loadConfig()
       const db = new CoordinationDatabase(config.data_directory)
       const messageManager = new MessageManager(db, config.data_directory)
-      
+
       const input: SendMessageInput = {
         to: options.to.split(',').map((p: string) => p.trim()) as ParticipantId[],
         type: options.type,
@@ -288,17 +401,16 @@ program
         subject: options.subject,
         content: options.content,
         response_required: true,
-        expires_in_hours: 168
+        expires_in_hours: 168,
       }
-      
+
       const message = await messageManager.createMessage(input, config.participant_id)
-      
+
       console.log(chalk.green('✅ Message sent successfully!'))
       console.log(`ID: ${message.id}`)
       console.log(`Thread: ${message.thread_id}`)
-      
+
       db.close()
-      
     } catch (error) {
       console.error(chalk.red('Failed to send message:'), error)
       process.exit(1)
@@ -313,49 +425,63 @@ program
   .option('--type <type>', 'Filter by type')
   .option('--priority <priority>', 'Filter by priority')
   .option('--limit <limit>', 'Maximum number of messages', '20')
-  .action(async (options) => {
+  .action(async options => {
     try {
       const config = await loadConfig()
       const db = new CoordinationDatabase(config.data_directory)
       const messageManager = new MessageManager(db, config.data_directory)
-      
+
       const input: GetMessagesInput = {
         status: options.status ? [options.status] : undefined,
         type: options.type ? [options.type] : undefined,
         priority: options.priority ? [options.priority] : undefined,
         limit: parseInt(options.limit),
-        detail_level: 'summary'
+        detail_level: 'summary',
       }
-      
+
       const messages = await messageManager.getMessages(input, config.participant_id)
-      
+
       if (messages.length === 0) {
         console.log(chalk.yellow('📭 No messages found'))
         return
       }
-      
+
       console.log(chalk.blue(`📨 Found ${messages.length} messages:`))
       console.log()
-      
+
       for (const msg of messages) {
-        const statusIcon = msg.status === 'pending' ? '⏳' :
-                          msg.status === 'read' ? '👁️' :
-                          msg.status === 'responded' ? '💬' :
-                          msg.status === 'resolved' ? '✅' : '📁'
-        
-        const priorityColor = msg.priority === 'CRITICAL' ? chalk.red :
-                             msg.priority === 'H' ? chalk.magenta :
-                             msg.priority === 'M' ? chalk.yellow : chalk.green
-        
-        console.log(`${statusIcon} ${priorityColor(msg.priority)} ${chalk.bold(msg.id)} - ${msg.subject}`)
+        const statusIcon =
+          msg.status === 'pending'
+            ? '⏳'
+            : msg.status === 'read'
+              ? '👁️'
+              : msg.status === 'responded'
+                ? '💬'
+                : msg.status === 'resolved'
+                  ? '✅'
+                  : '📁'
+
+        const priorityColor =
+          msg.priority === 'CRITICAL'
+            ? chalk.red
+            : msg.priority === 'H'
+              ? chalk.magenta
+              : msg.priority === 'M'
+                ? chalk.yellow
+                : chalk.green
+
+        console.log(
+          `${statusIcon} ${priorityColor(msg.priority)} ${chalk.bold(msg.id)} - ${msg.subject}`
+        )
         console.log(`   ${chalk.gray(`From: ${msg.from} → To: ${msg.to.join(', ')}`)}`)
-        console.log(`   ${chalk.gray(`Type: ${msg.type} | Created: ${msg.created_at.toLocaleDateString()}`)}`)
+        console.log(
+          `   ${chalk.gray(`Type: ${msg.type} | Created: ${msg.created_at.toLocaleDateString()}`)}`
+        )
         console.log(`   ${msg.summary.substring(0, 100)}${msg.summary.length > 100 ? '...' : ''}`)
         console.log()
       }
-      
+
       db.close()
-      
     } catch (error) {
       console.error(chalk.red('Failed to list messages:'), error)
       process.exit(1)
@@ -372,10 +498,10 @@ program
       const db = new CoordinationDatabase(config.data_directory)
       const participantRegistry = new ParticipantRegistry(db, config.data_directory)
       const indexingEngine = new IndexingEngine(db)
-      
+
       console.log(chalk.blue('📊 Coordination System Status'))
       console.log()
-      
+
       // Database info
       const dbInfo = db.getInfo()
       console.log(chalk.green('Database:'))
@@ -383,17 +509,16 @@ program
       console.log(`  Size: ${Math.round(dbInfo.size / 1024)} KB`)
       console.log(`  Permissions: ${dbInfo.permissions}`)
       console.log()
-      
+
       // Participant info
       const participants = await participantRegistry.getParticipants()
       console.log(chalk.green('Participants:'))
       for (const p of participants) {
-        const statusIcon = p.status === 'active' ? '🟢' : 
-                          p.status === 'inactive' ? '🔴' : '🟡'
+        const statusIcon = p.status === 'active' ? '🟢' : p.status === 'inactive' ? '🔴' : '🟡'
         console.log(`  ${statusIcon} ${p.id} (${p.capabilities.join(', ')})`)
       }
       console.log()
-      
+
       // Message stats
       const stats = await indexingEngine.getMessageStats(config.participant_id, 7)
       console.log(chalk.green('Messages (Last 7 days):'))
@@ -402,9 +527,8 @@ program
       console.log(`  Received: ${stats.messages_received}`)
       console.log(`  Response Rate: ${Math.round(stats.response_rate * 100)}%`)
       console.log()
-      
+
       db.close()
-      
     } catch (error) {
       console.error(chalk.red('Failed to get status:'), error)
       process.exit(1)
@@ -417,42 +541,40 @@ program
   .description('Compact a conversation thread')
   .option('--thread-id <id>', 'Thread ID to compact')
   .option('--strategy <strategy>', 'Compaction strategy', 'summarize')
-  .action(async (options) => {
+  .action(async options => {
     if (!options.threadId) {
       console.error(chalk.red('❌ Thread ID is required'))
       process.exit(1)
     }
-    
+
     try {
       const config = await loadConfig()
       const db = new CoordinationDatabase(config.data_directory)
       const compactionEngine = new CompactionEngine(db, config.data_directory)
-      
+
       const spinner = ora('Compacting thread...').start()
-      
+
       const input: CompactThreadInput = {
         thread_id: options.threadId,
         strategy: options.strategy,
         preserve_decisions: true,
-        preserve_critical: true
+        preserve_critical: true,
       }
-      
+
       const result = await compactionEngine.compactThread(input, config.participant_id)
-      
+
       spinner.succeed(chalk.green('✅ Thread compacted successfully!'))
-      
+
       console.log(`Original messages: ${result.original_count}`)
       console.log(`Compacted messages: ${result.compacted_count}`)
       console.log(`Space saved: ${Math.round(result.space_saved_bytes / 1024)} KB`)
-      
+
       db.close()
-      
     } catch (error) {
       console.error(chalk.red('Failed to compact thread:'), error)
       process.exit(1)
     }
   })
-
 
 // Search messages
 program
@@ -465,34 +587,37 @@ program
       const config = await loadConfig()
       const db = new CoordinationDatabase(config.data_directory)
       const indexingEngine = new IndexingEngine(db)
-      
+
       const input: SearchMessagesInput = {
         query,
         semantic: true,
-        limit: parseInt(options.limit)
+        limit: parseInt(options.limit),
       }
-      
+
       const results = await indexingEngine.searchMessages(input, config.participant_id)
-      
+
       if (results.length === 0) {
         console.log(chalk.yellow(`🔍 No results found for: "${query}"`))
         return
       }
-      
+
       console.log(chalk.blue(`🔍 Found ${results.length} results for: "${query}"`))
       console.log()
-      
+
       for (const result of results) {
         const relevance = Math.round(result.relevance_score * 100)
         console.log(`${chalk.bold(result.message.id)} (${relevance}% match)`)
         console.log(`${result.message.subject}`)
-        console.log(chalk.gray(`From: ${result.message.from} | ${result.message.created_at.toLocaleDateString()}`))
+        console.log(
+          chalk.gray(
+            `From: ${result.message.from} | ${result.message.created_at.toLocaleDateString()}`
+          )
+        )
         console.log(`${result.match_context || result.message.summary.substring(0, 150)}...`)
         console.log()
       }
-      
+
       db.close()
-      
     } catch (error) {
       console.error(chalk.red('Failed to search:'), error)
       process.exit(1)
@@ -503,12 +628,17 @@ async function loadConfig(): Promise<CoordinationConfig> {
   const configPaths = [
     process.env.CCP_CONFIG,
     '.coordination/config.yaml',
-    path.join(process.cwd(), '.coordination', 'config.yaml')
+    path.join(process.cwd(), '.coordination', 'config.yaml'),
   ].filter(Boolean) as string[]
-  
+
   for (const configPath of configPaths) {
     try {
-      if (await fs.access(configPath).then(() => true).catch(() => false)) {
+      if (
+        await fs
+          .access(configPath)
+          .then(() => true)
+          .catch(() => false)
+      ) {
         const configContent = await fs.readFile(configPath, 'utf-8')
         const rawConfig = YAML.parse(configContent)
         return validateInput(CoordinationConfig, rawConfig, 'configuration file')
@@ -517,13 +647,12 @@ async function loadConfig(): Promise<CoordinationConfig> {
       // Continue to next path
     }
   }
-  
+
   throw new Error('No configuration file found. Run "ccp init" first.')
 }
 
 // Participant management commands
-const participant = program.command('participant')
-  .description('Manage participants')
+const participant = program.command('participant').description('Manage participants')
 
 // Add participant
 participant
@@ -536,22 +665,22 @@ participant
       const config = await loadConfig()
       const db = new CoordinationDatabase(config.data_directory)
       const participantRegistry = new ParticipantRegistry(db, config.data_directory)
-      
+
       // Parse capabilities
       const capabilities = options.capabilities.split(',').map(c => c.trim())
-      
+
       const newParticipant = {
         id: id as ParticipantId,
         capabilities,
-        default_priority: options.priority as Priority
+        default_priority: options.priority as Priority,
       }
-      
+
       await participantRegistry.registerParticipant(newParticipant)
-      
+
       console.log(chalk.green(`✅ Participant ${id} added successfully!`))
       console.log(`Capabilities: ${capabilities.join(', ')}`)
       console.log(`Default Priority: ${options.priority}`)
-      
+
       db.close()
     } catch (error) {
       console.error(chalk.red('Failed to add participant:'), error)
@@ -568,18 +697,17 @@ participant
       const config = await loadConfig()
       const db = new CoordinationDatabase(config.data_directory)
       const participantRegistry = new ParticipantRegistry(db, config.data_directory)
-      
+
       const participants = await participantRegistry.getParticipants()
-      
+
       console.log(chalk.blue('👥 Registered Participants'))
       console.log()
-      
+
       if (participants.length === 0) {
         console.log(chalk.yellow('No participants registered yet.'))
       } else {
         for (const p of participants) {
-          const statusIcon = p.status === 'active' ? '🟢' : 
-                            p.status === 'inactive' ? '🔴' : '🟡'
+          const statusIcon = p.status === 'active' ? '🟢' : p.status === 'inactive' ? '🔴' : '🟡'
           console.log(`${statusIcon} ${chalk.bold(p.id)}`)
           console.log(`   Capabilities: ${p.capabilities.join(', ')}`)
           console.log(`   Priority: ${p.default_priority}`)
@@ -590,7 +718,7 @@ participant
           console.log()
         }
       }
-      
+
       db.close()
     } catch (error) {
       console.error(chalk.red('Failed to list participants:'), error)
@@ -610,29 +738,29 @@ participant
       const config = await loadConfig()
       const db = new CoordinationDatabase(config.data_directory)
       const participantRegistry = new ParticipantRegistry(db, config.data_directory)
-      
+
       const updates: any = {}
-      
+
       if (options.capabilities) {
         updates.capabilities = options.capabilities.split(',').map(c => c.trim())
       }
-      
+
       if (options.priority) {
         updates.default_priority = options.priority as Priority
       }
-      
+
       if (options.status) {
         updates.status = options.status
       }
-      
+
       await participantRegistry.updateParticipant(
         id as ParticipantId,
         updates,
         config.participant_id
       )
-      
+
       console.log(chalk.green(`✅ Participant ${id} updated successfully!`))
-      
+
       db.close()
     } catch (error) {
       console.error(chalk.red('Failed to update participant:'), error)
@@ -644,16 +772,16 @@ participant
 participant
   .command('remove <id>')
   .description('Remove a participant (soft delete)')
-  .action(async (id) => {
+  .action(async id => {
     try {
       const config = await loadConfig()
       const db = new CoordinationDatabase(config.data_directory)
       const participantRegistry = new ParticipantRegistry(db, config.data_directory)
-      
+
       await participantRegistry.deactivateParticipant(id as ParticipantId, config.participant_id)
-      
+
       console.log(chalk.green(`✅ Participant ${id} deactivated successfully!`))
-      
+
       db.close()
     } catch (error) {
       console.error(chalk.red('Failed to remove participant:'), error)
