@@ -524,7 +524,7 @@ export class CoordinationMCPServer {
     const input = {
       ...rawInput,
       limit: rawInput.limit ?? 20,
-      detail_level: rawInput.detail_level ?? 'summary'
+      detail_level: rawInput.detail_level ?? 'full'
     }
     
     const messages = await this.messageManager.getMessages(input, this.config.participant_id)
@@ -762,7 +762,7 @@ export class CoordinationMCPServer {
           '• `since_hours`: Only messages from last N hours\n' +
           '• `thread_id`: Filter by specific thread\n' +
           '• `limit`: Max messages to return (default: 20, max: 100)\n' +
-          '• `detail_level`: Level of detail (index, summary, full)',
+          '• `detail_level`: Level of detail (index, summary, full) - defaults to full',
         
         'ccp_respond_message': '💬 **Respond to Message**\n\n' +
           'Respond to a coordination message.\n\n' +

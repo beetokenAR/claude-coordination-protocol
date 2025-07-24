@@ -134,7 +134,7 @@ export const GetMessagesInput = z.object({
   since_hours: z.number().positive().optional(),
   thread_id: z.string().optional(),
   limit: z.number().positive().max(100).default(20),
-  detail_level: z.enum(['index', 'summary', 'full']).default('summary')
+  detail_level: z.enum(['index', 'summary', 'full']).default('full')
 })
 
 export const RespondMessageInput = z.object({
