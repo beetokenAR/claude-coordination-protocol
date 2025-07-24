@@ -16,6 +16,7 @@ import { CompactionEngine } from './core/compaction-engine.js'
 import { CoordinationMCPServer } from './mcp/server.js'
 import { validateInput } from './utils/validation.js'
 import { discoverDatabases, suggestBestDatabase, generateFragmentationWarnings } from './utils/database-discovery.js'
+import { createMigrateCommand } from './cli/commands/migrate.js'
 import {
   CoordinationConfig,
   ParticipantId,
@@ -659,6 +660,9 @@ participant
       process.exit(1)
     }
   })
+
+// Add migrate command
+program.addCommand(createMigrateCommand())
 
 // Parse and execute
 program.parse()

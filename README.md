@@ -360,6 +360,8 @@ participants:
 | `emergency` | Critical issues | "Production down - all hands!" |
 | `broadcast` | Announcements | "Team meeting at 3pm" |
 
+> **⚠️ Important Note**: System-generated messages (from `@system`) are read-only. While participants can view these messages if they're recipients, they cannot respond directly to `@system` as it's not a registered participant. To discuss system messages, create a new message thread between active participants.
+
 ---
 
 ## 🎖️ **Priority Levels**

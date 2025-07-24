@@ -1,4 +1,5 @@
 import { DatabaseError } from '../types/index.js'
+import { DatabaseMigrator } from './migrator.js'
 
 export const SCHEMA_VERSION = 2
 
@@ -113,104 +114,28 @@ export const CREATE_FTS_TABLES = [
 
 /**
  * Initialize database schema
+ * @deprecated Use DatabaseMigrator instead
  */
 export function initializeSchema(db: any): void {
-  try {
-    // Enable WAL mode for better concurrency
-    db.pragma('journal_mode = WAL')
-    db.pragma('synchronous = NORMAL')
-    db.pragma('cache_size = 10000')
-    db.pragma('foreign_keys = ON')
-    
-    // Create tables
-    db.exec(CREATE_MESSAGES_TABLE)
-    db.exec(CREATE_CONVERSATIONS_TABLE)
-    db.exec(CREATE_PARTICIPANTS_TABLE)
-    db.exec(CREATE_METADATA_TABLE)
-    
-    // Create indexes
-    for (const indexSql of CREATE_INDEXES) {
-      db.exec(indexSql)
-    }
-    
-    // Create FTS tables and triggers
-    for (const ftsSql of CREATE_FTS_TABLES) {
-      db.exec(ftsSql)
-    }
-    
-    // Set schema version
-    const upsertMetadata = db.prepare(`
-      INSERT OR REPLACE INTO metadata (key, value, updated_at) 
-      VALUES (?, ?, ?)
-    `)
-    
-    upsertMetadata.run(
-      'schema_version', 
-      SCHEMA_VERSION.toString(), 
-      new Date().toISOString()
-    )
-    
-  } catch (error: any) {
-    throw new DatabaseError(
-      `Failed to initialize database schema: ${error.message}`,
-      { error: error.message }
-    )
-  }
+  // This function is kept for backward compatibility
+  // New code should use DatabaseMigrator
+  const migrator = new DatabaseMigrator(db)
+  migrator.migrate()
 }
 
 /**
  * Check if database needs migration
+ * @deprecated Use DatabaseMigrator.getCurrentVersion() instead
  */
 export function checkSchemaVersion(db: any): number {
-  try {
-    const getVersion = db.prepare('SELECT value FROM metadata WHERE key = ?')
-    const result = getVersion.get('schema_version') as { value: string } | undefined
-    
-    if (!result) {
-      return 0 // No version set, assume fresh database
-    }
-    
-    return parseInt(result.value, 10)
-  } catch (error: any) {
-    // If metadata table doesn't exist, assume version 0
-    return 0
-  }
+  const migrator = new DatabaseMigrator(db)
+  return migrator.getCurrentVersion()
 }
 
 /**
  * Migrate database schema if needed
  */
 export function migrateSchema(db: any): void {
-  const currentVersion = checkSchemaVersion(db)
-  
-  if (currentVersion < SCHEMA_VERSION) {
-    console.log(`Migrating database from version ${currentVersion} to ${SCHEMA_VERSION}`)
-    
-    // Run migrations based on current version
-    if (currentVersion < 1) {
-      // Migration to version 1 (initial schema)
-      initializeSchema(db)
-    }
-    
-    // Future migrations would go here
-    if (currentVersion < 2) {
-      // Migration to version 2 (add suggested_approach column)
-      try {
-        db.exec('ALTER TABLE messages ADD COLUMN suggested_approach TEXT')
-        console.log('Added suggested_approach column to messages table')
-        
-        // Update schema version
-        const upsertMetadata = db.prepare(`
-          INSERT OR REPLACE INTO metadata (key, value, updated_at) 
-          VALUES (?, ?, ?)
-        `)
-        upsertMetadata.run('schema_version', '2', new Date().toISOString())
-      } catch (error: any) {
-        // Column might already exist in development databases
-        console.log('Migration note:', error.message)
-      }
-    }
-    
-    console.log('Database migration completed')
-  }
+  const migrator = new DatabaseMigrator(db)
+  migrator.migrate()
 }
