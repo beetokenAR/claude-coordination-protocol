@@ -2,14 +2,14 @@
 
 import path from 'path'
 import fs from 'fs'
-import { fileURLToPath } from 'url'
+// import { fileURLToPath } from 'url'
 import YAML from 'yaml'
 
 import { CoordinationMCPServer } from './mcp/server.js'
 import { CoordinationConfig } from './types/index.js'
 import { validateInput } from './utils/validation.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+// const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 async function loadConfig(): Promise<CoordinationConfig> {
   // Try to load config from various locations
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
   try {
     const config = await loadConfig()
     
-    console.error(`Starting Claude Coordination Protocol MCP server...`)
+    console.error('Starting Claude Coordination Protocol MCP server...')
     console.error(`Participant ID: ${config.participant_id}`)
     console.error(`Data Directory: ${config.data_directory}`)
     console.error(`Archive Days: ${config.archive_days}`)

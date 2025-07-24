@@ -3,10 +3,10 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { SecureParticipant } from '../../../security/domain/entities/SecureParticipant.js'
-import { ParticipantId } from '../../../security/domain/values/ParticipantId.js'
-import { SecurityLevel } from '../../../security/domain/values/SecurityLevel.js'
-import { Permission } from '../../../security/domain/values/Permission.js'
+import { SecureParticipant } from '../../../security/domain/entities/SecureParticipant.ts'
+import { ParticipantId } from '../../../security/domain/values/ParticipantId.ts'
+import { SecurityLevel } from '../../../security/domain/values/SecurityLevel.ts'
+import { Permission } from '../../../security/domain/values/Permission.ts'
 
 describe('SecureParticipant', () => {
   let participantId: ParticipantId

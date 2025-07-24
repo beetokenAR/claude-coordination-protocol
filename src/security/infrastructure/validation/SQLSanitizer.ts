@@ -50,7 +50,7 @@ export class SQLSanitizer {
     /(\bPG_SLEEP\s*\()/gi,           // Timing attacks (PostgreSQL)
     /(\bEXTRACTVALUE\s*\()/gi,       // XML injection (MySQL)
     /(\bUPDATEXML\s*\()/gi,          // XML injection (MySQL)
-    /(\bXMLTYPE\s*\()/gi,            // XML injection (Oracle)
+    /(\bXMLTYPE\s*\()/gi            // XML injection (Oracle)
   ]
 
   private static readonly MAX_QUERY_LENGTH = 10000
@@ -62,7 +62,7 @@ export class SQLSanitizer {
   public static sanitizeIdentifier(identifier: string): string {
     this.validateIdentifierInput(identifier)
 
-    let sanitized = identifier.trim()
+    const sanitized = identifier.trim()
 
     // Verificar longitud
     if (sanitized.length > this.MAX_IDENTIFIER_LENGTH) {
@@ -144,9 +144,10 @@ export class SQLSanitizer {
     }
 
     // Escapar comillas simples duplicándolas
-    let escaped = value.replace(/'/g, "''")
+    let escaped = value.replace(/'/g, '\'\'')
 
     // Escapar caracteres de control
+    // eslint-disable-next-line no-control-regex
     escaped = escaped.replace(/[\x00\x08\x09\x1a\n\r"\\%]/g, (char) => {
       switch (char) {
         case '\x00': return '\\0'
@@ -208,6 +209,7 @@ export class SQLSanitizer {
     }
 
     // Verificar caracteres de control
+    // eslint-disable-next-line no-control-regex
     if (/[\x00-\x1F]/.test(identifier)) {
       throw new Error('Identifier contains control characters')
     }
@@ -230,6 +232,7 @@ export class SQLSanitizer {
     }
 
     // Verificar caracteres de control peligrosos
+    // eslint-disable-next-line no-control-regex
     if (/[\x00]/.test(query)) {
       throw new Error('Query contains null bytes')
     }

@@ -4,7 +4,7 @@
  */
 
 import { AuthenticationService } from './application/services/AuthenticationService.js'
-import { AuthorizationService } from './application/services/AuthorizationService.js'
+import { AuthorizationService, AuthorizationRequest, AuthorizationResult } from './application/services/AuthorizationService.js'
 import { AuditService } from './infrastructure/services/AuditService.js'
 import { SecureParticipantRepository } from './infrastructure/repositories/SecureParticipantRepository.js'
 import { IParticipantRepository } from './application/interfaces/IParticipantRepository.js'
@@ -13,7 +13,6 @@ import { ParticipantId } from './domain/values/ParticipantId.js'
 import { SecureParticipant } from './domain/entities/SecureParticipant.js'
 import { SecurityLevel } from './domain/values/SecurityLevel.js'
 import { Permission } from './domain/values/Permission.js'
-import { AuthorizationRequest, AuthorizationResult } from './application/services/AuthorizationService.js'
 
 export interface SecurityConfig {
   databasePath: string

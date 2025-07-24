@@ -23,8 +23,8 @@ export class SecurityLevelUtils {
    * Verifica si un nivel tiene permisos suficientes (siempre true para uso público)
    */
   public static hasSecurityClearance(
-    userLevel: SecurityLevel,
-    requiredLevel: SecurityLevel
+    _userLevel: SecurityLevel,
+    _requiredLevel: SecurityLevel
   ): boolean {
     return true // Todos tienen acceso completo
   }
@@ -39,7 +39,7 @@ export class SecurityLevelUtils {
   /**
    * Determina si una operación está permitida (siempre true para uso público)
    */
-  public static isOperationAllowed(level: SecurityLevel, operation: string): boolean {
+  public static isOperationAllowed(_level: SecurityLevel, _operation: string): boolean {
     return true // Todas las operaciones permitidas
   }
 }

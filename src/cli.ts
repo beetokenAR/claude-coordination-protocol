@@ -15,7 +15,7 @@ import { IndexingEngine } from './core/indexing-engine.js'
 import { CompactionEngine } from './core/compaction-engine.js'
 import { CoordinationMCPServer } from './mcp/server.js'
 import { validateInput } from './utils/validation.js'
-import { discoverDatabases, suggestBestDatabase, generateFragmentationWarnings, shouldCentralizeCoordination } from './utils/database-discovery.js'
+import { discoverDatabases, suggestBestDatabase, generateFragmentationWarnings } from './utils/database-discovery.js'
 import {
   CoordinationConfig,
   ParticipantId,

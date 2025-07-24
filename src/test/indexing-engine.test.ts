@@ -2,20 +2,44 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { CoordinationDatabase } from '../database/connection.js'
 import { MessageManager } from '../core/message-manager.js'
 import { IndexingEngine } from '../core/indexing-engine.js'
+import { ParticipantRegistry } from '../core/participant-registry.js'
 import { TEST_DATA_DIR } from './setup.js'
-import type { ParticipantId, SendMessageInput, SearchMessagesInput } from '../types/index.js'
+import type { ParticipantId, SearchMessagesInput } from '../types/index.js'
 
 describe('IndexingEngine', () => {
   let db: CoordinationDatabase
   let messageManager: MessageManager
   let indexingEngine: IndexingEngine
+  let participantRegistry: ParticipantRegistry
   const testParticipant: ParticipantId = '@backend'
   const targetParticipant: ParticipantId = '@mobile'
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = new CoordinationDatabase(TEST_DATA_DIR)
     messageManager = new MessageManager(db, TEST_DATA_DIR)
     indexingEngine = new IndexingEngine(db)
+    participantRegistry = new ParticipantRegistry(db, TEST_DATA_DIR)
+    
+    // Register test participants to satisfy foreign key constraints
+    try {
+      await participantRegistry.registerParticipant({
+        id: testParticipant,
+        capabilities: ['backend'],
+        default_priority: 'M'
+      })
+    } catch (error) {
+      // Participant might already exist, which is fine
+    }
+    
+    try {
+      await participantRegistry.registerParticipant({
+        id: targetParticipant,
+        capabilities: ['mobile'],
+        default_priority: 'M'
+      })
+    } catch (error) {
+      // Participant might already exist, which is fine
+    }
   })
 
   describe('searchMessages', () => {

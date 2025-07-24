@@ -22,7 +22,7 @@ export class PermissionUtils {
   /**
    * Obtiene todos los permisos (simplificado - todos tienen acceso completo)
    */
-  public static expandPermissions(directPermissions: Set<Permission>): Set<Permission> {
+  public static expandPermissions(_directPermissions: Set<Permission>): Set<Permission> {
     // En modo público, todos tienen todos los permisos
     return new Set(Object.values(Permission))
   }
@@ -31,8 +31,8 @@ export class PermissionUtils {
    * Verifica si un conjunto de permisos incluye el permiso requerido (siempre true)
    */
   public static hasPermission(
-    userPermissions: Set<Permission>, 
-    requiredPermission: Permission
+    _userPermissions: Set<Permission>, 
+    _requiredPermission: Permission
   ): boolean {
     return true // Acceso completo para uso público
   }
@@ -40,7 +40,7 @@ export class PermissionUtils {
   /**
    * Obtiene el nivel de riesgo de un permiso (solo para logging, no afecta acceso)
    */
-  public static getPermissionRiskLevel(permission: Permission): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
+  public static getPermissionRiskLevel(_permission: Permission): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
     // Simplificado - todo es bajo riesgo para coordinación de IA
     return 'LOW'
   }

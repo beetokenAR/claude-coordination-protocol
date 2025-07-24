@@ -1,11 +1,11 @@
-import { nanoid } from 'nanoid'
-import { format, addHours, isAfter, isBefore } from 'date-fns'
+import { customAlphabet } from 'nanoid'
+import { format, addHours } from 'date-fns'
 import fs from 'fs/promises'
 import path from 'path'
 
 import { CoordinationDatabase } from '../database/connection.js'
 import { withFileLock } from '../utils/file-lock.js'
-import { validateInput, validateMessageId, validateThreadId, validateNoCycles } from '../utils/validation.js'
+import { validateInput, validateMessageId, validateNoCycles } from '../utils/validation.js'
 import {
   CoordinationMessage,
   MessageRow,
@@ -15,10 +15,7 @@ import {
   MessageFilters,
   PaginationOptions,
   MessageType,
-  Priority,
-  MessageStatus,
   ParticipantId,
-  DatabaseError,
   ValidationError
 } from '../types/index.js'
 
@@ -368,7 +365,8 @@ export class MessageManager {
   private generateMessageId(type: MessageType): string {
     const typePrefix = type.toUpperCase()
     const timestamp = Date.now().toString(36)
-    const random = nanoid(3).toUpperCase()
+    const nanoidAlphanumeric = customAlphabet('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', 3)
+    const random = nanoidAlphanumeric()
     return `${typePrefix}-${timestamp}-${random}`
   }
   
@@ -431,15 +429,15 @@ export class MessageManager {
         const contentPath = path.join(this.dataDir, message.content_ref)
         const fullContent = await fs.readFile(contentPath, 'utf-8')
         message.summary = fullContent
-      } catch (error) {
-        console.warn(`Failed to load content for message ${message.id}:`, error)
+      } catch (_error) {
+        console.warn(`Failed to load content for message ${message.id}:`, _error)
       }
     }
     
     return message
   }
   
-  private updateConversationThread(message: CoordinationMessage): void {
+  private updateConversationThread(_message: CoordinationMessage): void {
     // This would update the conversations table
     // Implementation depends on conversation manager
     // For now, just ensure the basic data is consistent

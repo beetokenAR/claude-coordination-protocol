@@ -1,4 +1,3 @@
-import Database from 'better-sqlite3'
 import { DatabaseError } from '../types/index.js'
 
 export const SCHEMA_VERSION = 2
@@ -197,7 +196,7 @@ export function migrateSchema(db: any): void {
     if (currentVersion < 2) {
       // Migration to version 2 (add suggested_approach column)
       try {
-        db.exec(`ALTER TABLE messages ADD COLUMN suggested_approach TEXT`)
+        db.exec('ALTER TABLE messages ADD COLUMN suggested_approach TEXT')
         console.log('Added suggested_approach column to messages table')
         
         // Update schema version

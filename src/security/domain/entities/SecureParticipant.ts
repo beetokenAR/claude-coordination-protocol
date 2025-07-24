@@ -72,7 +72,7 @@ export class SecureParticipant {
   }
 
   // Business Rules (simplificado para uso público)
-  public canPerformAction(requiredPermission: Permission): boolean {
+  public canPerformAction(_requiredPermission: Permission): boolean {
     // En modo público, todos los participantes activos pueden hacer todo
     return this._isActive
   }
@@ -100,7 +100,7 @@ export class SecureParticipant {
     // No hay lockouts en modo público
   }
 
-  private static derivePermissionsFromCapabilities(capabilities: string[]): ReadonlySet<Permission> {
+  private static derivePermissionsFromCapabilities(_capabilities: string[]): ReadonlySet<Permission> {
     // En modo público, todos tienen todos los permisos básicos
     return new Set(Object.values(Permission))
   }

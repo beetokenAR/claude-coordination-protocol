@@ -1,18 +1,42 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { CoordinationDatabase } from '../database/connection.js'
 import { MessageManager } from '../core/message-manager.js'
+import { ParticipantRegistry } from '../core/participant-registry.js'
 import { TEST_DATA_DIR } from './setup.js'
 import type { SendMessageInput, ParticipantId } from '../types/index.js'
 
 describe('MessageManager', () => {
   let db: CoordinationDatabase
   let messageManager: MessageManager
+  let participantRegistry: ParticipantRegistry
   const testParticipant: ParticipantId = '@backend'
   const targetParticipant: ParticipantId = '@mobile'
 
-  beforeEach(() => {
+  beforeEach(async () => {
     db = new CoordinationDatabase(TEST_DATA_DIR)
     messageManager = new MessageManager(db, TEST_DATA_DIR)
+    participantRegistry = new ParticipantRegistry(db, TEST_DATA_DIR)
+    
+    // Register test participants to satisfy foreign key constraints
+    try {
+      await participantRegistry.registerParticipant({
+        id: testParticipant,
+        capabilities: ['backend'],
+        default_priority: 'M'
+      })
+    } catch (error) {
+      // Participant might already exist, which is fine
+    }
+    
+    try {
+      await participantRegistry.registerParticipant({
+        id: targetParticipant,
+        capabilities: ['mobile'],
+        default_priority: 'M'
+      })
+    } catch (error) {
+      // Participant might already exist, which is fine
+    }
   })
 
   describe('createMessage', () => {
@@ -322,7 +346,7 @@ describe('MessageManager', () => {
 
   describe('archiveExpiredMessages', () => {
     it('should archive messages that have expired', async () => {
-      // Create message that expires in the past
+      // Create message that expires very soon
       const message = await messageManager.createMessage({
         to: [targetParticipant],
         type: 'sync',
@@ -330,8 +354,11 @@ describe('MessageManager', () => {
         subject: 'Expired message',
         content: 'This message should be archived',
         response_required: false,
-        expires_in_hours: -1 // Expired 1 hour ago
+        expires_in_hours: 0.001 // Expires in 3.6 seconds
       }, testParticipant)
+      
+      // Wait for it to expire
+      await new Promise(resolve => setTimeout(resolve, 100))
 
       const archivedCount = await messageManager.archiveExpiredMessages()
 
@@ -342,7 +369,7 @@ describe('MessageManager', () => {
     })
 
     it('should not archive resolved messages even if expired', async () => {
-      // Create and resolve a message that's expired
+      // Create and resolve a message that expires very soon
       const message = await messageManager.createMessage({
         to: [targetParticipant],
         type: 'sync',
@@ -350,8 +377,11 @@ describe('MessageManager', () => {
         subject: 'Resolved expired message',
         content: 'This message is resolved and expired',
         response_required: false,
-        expires_in_hours: -1
+        expires_in_hours: 0.001 // Expires in 3.6 seconds
       }, testParticipant)
+      
+      // Wait for it to expire
+      await new Promise(resolve => setTimeout(resolve, 100))
 
       await messageManager.resolveMessage(message.id, targetParticipant)
 

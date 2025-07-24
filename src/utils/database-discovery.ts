@@ -46,7 +46,7 @@ export async function discoverDatabases(currentDir: string = process.cwd()): Pro
       
       // Move up one directory
       const parentDir = path.dirname(searchDir)
-      if (parentDir === searchDir) break // Reached root
+      if (parentDir === searchDir) {break} // Reached root
       searchDir = parentDir
     }
     
@@ -97,7 +97,7 @@ export async function discoverDatabases(currentDir: string = process.cwd()): Pro
  * Suggest the best database location for coordination
  */
 export function suggestBestDatabase(databases: DatabaseLocation[]): DatabaseLocation | null {
-  if (databases.length === 0) return null
+  if (databases.length === 0) {return null}
   
   // Prefer databases with multiple participants
   const multiParticipant = databases.filter(db => db.participantCount > 1)
@@ -141,11 +141,11 @@ export function generateFragmentationWarnings(
  */
 export function shouldCentralizeCoordination(databases: DatabaseLocation[]): boolean {
   // If there are multiple databases, centralization is recommended
-  if (databases.length > 1) return true
+  if (databases.length > 1) {return true}
   
   // If there's a parent database with multiple participants, use that
   const parentMulti = databases.find(db => db.type === 'parent' && db.participantCount > 1)
-  if (parentMulti) return true
+  if (parentMulti) {return true}
   
   return false
 }
@@ -196,7 +196,7 @@ async function findProjectRoot(currentDir: string): Promise<string | null> {
     }
     
     const parentDir = path.dirname(searchDir)
-    if (parentDir === searchDir) break // Reached root
+    if (parentDir === searchDir) {break} // Reached root
     searchDir = parentDir
   }
   

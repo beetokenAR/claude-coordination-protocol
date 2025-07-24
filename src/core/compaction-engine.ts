@@ -6,12 +6,9 @@ import { CoordinationDatabase } from '../database/connection.js'
 import { withFileLock } from '../utils/file-lock.js'
 import { validateInput } from '../utils/validation.js'
 import {
-  CoordinationMessage,
-  Conversation,
   CompactThreadInput,
   CompactionResult,
   ParticipantId,
-  DatabaseError,
   ValidationError
 } from '../types/index.js'
 
@@ -174,7 +171,7 @@ export class CompactionEngine {
   }> {
     const messages = this.db.prepare(`
       SELECT status, priority, subject, summary, content_ref FROM messages
-      WHERE from_participant = ? OR json_extract(to_participants, '$[*]') LIKE '%' || ? || '%'
+      WHERE from_participant = ? OR to_participants LIKE '%"' || ? || '"%'
     `).all(participantId, participantId) as any[]
     
     let totalTokens = 0
@@ -235,7 +232,6 @@ export class CompactionEngine {
     
     // Create a single summarized message
     const firstMessage = messages[0]
-    const lastMessage = messages[messages.length - 1]
     
     const compactedMessage = {
       id: `${firstMessage.thread_id}-SUMMARY`,
@@ -312,7 +308,7 @@ export class CompactionEngine {
   
   private async archiveThread(
     messages: any[],
-    options: CompactThreadInput
+    _options: CompactThreadInput
   ): Promise<CompactionResult> {
     const now = new Date().toISOString()
     
@@ -399,7 +395,7 @@ export class CompactionEngine {
     
     if (groups.other.length > 0) {
       parts.push(`## Other Communications (${groups.other.length})`)
-      parts.push(`Various discussions and updates between participants.`)
+      parts.push('Various discussions and updates between participants.')
     }
     
     const totalMessages = Object.values(groups).reduce((sum, arr) => sum + arr.length, 0)
@@ -408,13 +404,13 @@ export class CompactionEngine {
     return parts.join('\n\n')
   }
   
-  private consolidateMessages(messages: any[], options: CompactThreadInput): any[] {
+  private consolidateMessages(messages: any[], _options: CompactThreadInput): any[] {
     // Simple consolidation - group by participant and merge similar content
     const consolidated: any[] = []
     const messagesByParticipant = new Map<string, any[]>()
     
     for (const msg of messages) {
-      if (options.preserve_critical && msg.priority === 'CRITICAL') {
+      if (_options.preserve_critical && msg.priority === 'CRITICAL') {
         consolidated.push(msg) // Keep critical messages unchanged
         continue
       }
@@ -427,7 +423,7 @@ export class CompactionEngine {
     }
     
     // Merge messages from same participant with same type/priority
-    for (const [key, msgs] of messagesByParticipant) {
+    for (const [, msgs] of messagesByParticipant) {
       if (msgs.length === 1) {
         consolidated.push(msgs[0])
       } else {
@@ -477,7 +473,7 @@ export class CompactionEngine {
     const threshold = Math.ceil(messages.length * 0.25)
     return Array.from(tagCounts.entries())
       .filter(([_, count]) => count >= threshold)
-      .map(([tag, _]) => tag)
+      .map(([tag]) => tag)
   }
   
   private async storeCompactedContent(

@@ -13,7 +13,7 @@ export type ResolutionStatus = z.infer<typeof ResolutionStatus>
 
 // Participant schema
 export const ParticipantId = z.string().regex(/^@[a-zA-Z][a-zA-Z0-9_-]*$/, {
-  message: "Participant ID must start with @ followed by alphanumeric characters"
+  message: 'Participant ID must start with @ followed by alphanumeric characters'
 })
 
 export const Participant = z.object({

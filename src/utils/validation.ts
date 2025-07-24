@@ -68,12 +68,12 @@ export function validateParticipantId(id: string): void {
 }
 
 /**
- * Validates message ID format (e.g., "CONTRACT-001", "ARCH-002")
+ * Validates message ID format (e.g., "CONTRACT-md4kl2p-ABC", "ARCH-lg8q9r-XYZ")
  */
 export function validateMessageId(id: string): void {
-  if (!/^[A-Z]+-\d{3}(-[A-Z]+-\d{3})*$/.test(id)) {
+  if (!/^[A-Z]+-[a-z0-9]+-[A-Z0-9]{3}$/.test(id)) {
     throw new ValidationError(
-      `Message ID must follow format TYPE-NNN (e.g., CONTRACT-001): ${id}`
+      `Message ID must follow format TYPE-timestamp-random (e.g., CONTRACT-md4kl2p-ABC): ${id}`
     )
   }
 }
@@ -105,6 +105,7 @@ export function validateFilePath(filePath: string): void {
   }
   
   // Check for null bytes and other dangerous characters
+  // eslint-disable-next-line no-control-regex
   if (/[\x00-\x1f\x7f-\x9f]/.test(filePath)) {
     throw new ValidationError(`Invalid characters in file path: ${filePath}`)
   }
@@ -120,7 +121,7 @@ export function validateContentSize(content: string, maxTokens = 10000): void {
   if (estimatedTokens > maxTokens) {
     throw new ValidationError(
       `Content too large: ~${estimatedTokens} tokens (max: ${maxTokens}). ` +
-      `Consider using content_ref for large content.`
+      'Consider using content_ref for large content.'
     )
   }
 }

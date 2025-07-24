@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import path from 'path'
 import fs from 'fs'
 import { DatabaseError } from '../types/index.js'
-import { initializeSchema, migrateSchema } from './schema.js'
+import { migrateSchema } from './schema.js'
 
 export class CoordinationDatabase {
   private db: Database.Database
@@ -238,7 +238,6 @@ export class CoordinationDatabase {
   backup(backupPath: string): void {
     try {
       // Create a simple file copy backup for better-sqlite3 compatibility
-      const fs = require('fs')
       fs.copyFileSync(this.dbPath, backupPath)
       
       // Set secure permissions on backup

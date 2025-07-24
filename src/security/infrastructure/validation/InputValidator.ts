@@ -12,7 +12,7 @@ export class InputValidator {
   // Patrones de seguridad
   private static readonly SQL_INJECTION_PATTERN = /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|CREATE|ALTER|EXEC|EXECUTE)\b)|(-{2})|\/\*|\*\/|;/gi
   private static readonly XSS_PATTERN = /<[^>]*>?/gm
-  private static readonly COMMAND_INJECTION_PATTERN = /[;&|`$\(\){}]/g
+  private static readonly COMMAND_INJECTION_PATTERN = /[;&|`$(){}]/g
   private static readonly PATH_TRAVERSAL_PATTERN = /\.\.\//g
 
   /**
@@ -141,6 +141,7 @@ export class InputValidator {
     let sanitized = input
 
     // Remover caracteres de control
+    // eslint-disable-next-line no-control-regex
     sanitized = sanitized.replace(/[\x00-\x1F\x7F]/g, '')
 
     // Trim whitespace

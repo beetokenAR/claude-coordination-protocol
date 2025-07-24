@@ -6,7 +6,6 @@ import {
   ParticipantRow,
   ParticipantId,
   Priority,
-  DatabaseError,
   ValidationError,
   PermissionError
 } from '../types/index.js'
@@ -213,7 +212,7 @@ export class ParticipantRegistry {
       // Check if participant has active messages
       const hasActiveMessages = this.db.prepare(`
         SELECT COUNT(*) as count FROM messages 
-        WHERE (from_participant = ? OR json_extract(to_participants, '$[*]') LIKE '%' || ? || '%')
+        WHERE (from_participant = ? OR to_participants LIKE '%"' || ? || '"%')
         AND status IN ('pending', 'read', 'responded')
       `).get(participantId, participantId) as { count: number }
       

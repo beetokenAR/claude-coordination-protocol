@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { SecurityLevel, SecurityLevelUtils } from '../../../security/domain/values/SecurityLevel.js'
+import { SecurityLevel, SecurityLevelUtils } from '../../../security/domain/values/SecurityLevel.ts'
 
 describe('SecurityLevel', () => {
   describe('enum values', () => {

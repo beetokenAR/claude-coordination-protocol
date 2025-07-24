@@ -5,7 +5,7 @@
 
 import { SecureParticipant } from '../../domain/entities/SecureParticipant.js'
 import { Permission, PermissionUtils } from '../../domain/values/Permission.js'
-import { SecurityLevel, SecurityLevelUtils } from '../../domain/values/SecurityLevel.js'
+// import { SecurityLevel, SecurityLevelUtils } from '../../domain/values/SecurityLevel.js'
 import { IAuditService } from '../interfaces/IAuditService.js'
 
 export interface AuthorizationRequest {

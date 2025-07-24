@@ -19,10 +19,8 @@ import {
   RespondMessageInput,
   SearchMessagesInput,
   CompactThreadInput,
-  ParticipantId,
   CoordinationConfig,
   CoordinationError,
-  ValidationError,
   DatabaseError,
   PermissionError
 } from '../types/index.js'
@@ -643,7 +641,7 @@ export class CoordinationMCPServer {
       content: [
         {
           type: 'text',
-          text: `🗜️ **Thread Compacted Successfully**\n\n` +
+          text: '🗜️ **Thread Compacted Successfully**\n\n' +
                `**Strategy:** ${input.strategy}\n` +
                `**Original Messages:** ${result.original_count}\n` +
                `**Compacted Messages:** ${result.compacted_count}\n` +
@@ -654,7 +652,7 @@ export class CoordinationMCPServer {
     }
   }
   
-  private async handleArchiveResolved(args: unknown): Promise<any> {
+  private async handleArchiveResolved(_args: unknown): Promise<any> {
     const archivedCount = await this.messageManager.archiveExpiredMessages()
     
     return {
@@ -687,7 +685,7 @@ export class CoordinationMCPServer {
       content: [
         {
           type: 'text',
-          text: `✅ **Participant Registered**\n\n` +
+          text: '✅ **Participant Registered**\n\n' +
                `**ID:** ${participant.id}\n` +
                `**Capabilities:** ${participant.capabilities.join(', ')}\n` +
                `**Default Priority:** ${participant.default_priority}\n` +
@@ -718,13 +716,13 @@ export class CoordinationMCPServer {
       content: [
         {
           type: 'text',
-          text: `👤 **Current Participant Identity**\n\n` +
+          text: '👤 **Current Participant Identity**\n\n' +
                `**ID:** ${participant.id}\n` +
                `**Status:** ${statusEmoji} ${participant.status}\n` +
                `**Capabilities:** ${participant.capabilities.join(', ')}\n` +
                `**Default Priority:** ${participant.default_priority}\n` +
                `**Last Seen:** ${participant.last_seen ? participant.last_seen.toLocaleString() : 'Never'}\n\n` +
-               `**Configuration:**\n` +
+               '**Configuration:**\n' +
                `• Data Directory: ${this.config.data_directory}\n` +
                `• Archive Days: ${this.config.archive_days}\n` +
                `• Token Limit: ${this.config.token_limit.toLocaleString()}\n` +
@@ -740,72 +738,72 @@ export class CoordinationMCPServer {
     if (command) {
       // Provide command-specific help
       const commandHelp: Record<string, string> = {
-        'ccp_send_message': `📤 **Send Message**\n\n` +
-          `Send a coordination message to other Claude participants.\n\n` +
-          `**Required Parameters:**\n` +
-          `• \`to\`: Array of participant IDs (e.g., ["@mobile", "@backend"])\n` +
-          `• \`type\`: Message type (arch, contract, sync, update, q, emergency, broadcast)\n` +
-          `• \`priority\`: Priority level (CRITICAL, H, M, L)\n` +
-          `• \`subject\`: Brief subject line (max 200 chars)\n` +
-          `• \`content\`: Message body\n\n` +
-          `**Optional Parameters:**\n` +
-          `• \`response_required\`: Whether response is needed (default: true)\n` +
-          `• \`expires_in_hours\`: Hours until expiry (default: 168)\n` +
-          `• \`tags\`: Array of tags for categorization\n` +
-          `• \`suggested_approach\`: SuperClaude suggestions for recipient`,
+        'ccp_send_message': '📤 **Send Message**\n\n' +
+          'Send a coordination message to other Claude participants.\n\n' +
+          '**Required Parameters:**\n' +
+          '• `to`: Array of participant IDs (e.g., ["@mobile", "@backend"])\n' +
+          '• `type`: Message type (arch, contract, sync, update, q, emergency, broadcast)\n' +
+          '• `priority`: Priority level (CRITICAL, H, M, L)\n' +
+          '• `subject`: Brief subject line (max 200 chars)\n' +
+          '• `content`: Message body\n\n' +
+          '**Optional Parameters:**\n' +
+          '• `response_required`: Whether response is needed (default: true)\n' +
+          '• `expires_in_hours`: Hours until expiry (default: 168)\n' +
+          '• `tags`: Array of tags for categorization\n' +
+          '• `suggested_approach`: SuperClaude suggestions for recipient',
         
-        'ccp_get_messages': `📨 **Get Messages**\n\n` +
-          `Retrieve coordination messages with filtering options.\n\n` +
-          `**Optional Parameters:**\n` +
-          `• \`participant\`: Filter by participant (defaults to you)\n` +
-          `• \`status\`: Array of statuses to filter\n` +
-          `• \`type\`: Array of message types to filter\n` +
-          `• \`priority\`: Array of priorities to filter\n` +
-          `• \`since_hours\`: Only messages from last N hours\n` +
-          `• \`thread_id\`: Filter by specific thread\n` +
-          `• \`limit\`: Max messages to return (default: 20, max: 100)\n` +
-          `• \`detail_level\`: Level of detail (index, summary, full)`,
+        'ccp_get_messages': '📨 **Get Messages**\n\n' +
+          'Retrieve coordination messages with filtering options.\n\n' +
+          '**Optional Parameters:**\n' +
+          '• `participant`: Filter by participant (defaults to you)\n' +
+          '• `status`: Array of statuses to filter\n' +
+          '• `type`: Array of message types to filter\n' +
+          '• `priority`: Array of priorities to filter\n' +
+          '• `since_hours`: Only messages from last N hours\n' +
+          '• `thread_id`: Filter by specific thread\n' +
+          '• `limit`: Max messages to return (default: 20, max: 100)\n' +
+          '• `detail_level`: Level of detail (index, summary, full)',
         
-        'ccp_respond_message': `💬 **Respond to Message**\n\n` +
-          `Respond to a coordination message.\n\n` +
-          `**Required Parameters:**\n` +
-          `• \`message_id\`: ID of message to respond to\n` +
-          `• \`content\`: Your response content\n\n` +
-          `**Optional Parameters:**\n` +
-          `• \`resolution_status\`: Status (partial, complete, requires_followup, blocked)`,
+        'ccp_respond_message': '💬 **Respond to Message**\n\n' +
+          'Respond to a coordination message.\n\n' +
+          '**Required Parameters:**\n' +
+          '• `message_id`: ID of message to respond to\n' +
+          '• `content`: Your response content\n\n' +
+          '**Optional Parameters:**\n' +
+          '• `resolution_status`: Status (partial, complete, requires_followup, blocked)',
         
-        'ccp_search_messages': `🔍 **Search Messages**\n\n` +
-          `Search messages using full-text or semantic search.\n\n` +
-          `**Required Parameters:**\n` +
-          `• \`query\`: Search query text\n\n` +
-          `**Optional Parameters:**\n` +
-          `• \`semantic\`: Use semantic search (default: true)\n` +
-          `• \`tags\`: Filter by tags\n` +
-          `• \`date_range\`: Filter by date range\n` +
-          `• \`participants\`: Filter by participants\n` +
-          `• \`limit\`: Max results (default: 10, max: 50)`,
+        'ccp_search_messages': '🔍 **Search Messages**\n\n' +
+          'Search messages using full-text or semantic search.\n\n' +
+          '**Required Parameters:**\n' +
+          '• `query`: Search query text\n\n' +
+          '**Optional Parameters:**\n' +
+          '• `semantic`: Use semantic search (default: true)\n' +
+          '• `tags`: Filter by tags\n' +
+          '• `date_range`: Filter by date range\n' +
+          '• `participants`: Filter by participants\n' +
+          '• `limit`: Max results (default: 10, max: 50)',
         
-        'ccp_compact_thread': `🗜️ **Compact Thread**\n\n` +
-          `Compact a conversation thread to optimize token usage.\n\n` +
-          `**Required Parameters:**\n` +
-          `• \`thread_id\`: Thread ID to compact\n\n` +
-          `**Optional Parameters:**\n` +
-          `• \`strategy\`: Compaction strategy (summarize, consolidate, archive)\n` +
-          `• \`preserve_decisions\`: Keep decision messages (default: true)\n` +
-          `• \`preserve_critical\`: Keep critical messages (default: true)`,
+        'ccp_compact_thread': '🗜️ **Compact Thread**\n\n' +
+          'Compact a conversation thread to optimize token usage.\n\n' +
+          '**Required Parameters:**\n' +
+          '• `thread_id`: Thread ID to compact\n\n' +
+          '**Optional Parameters:**\n' +
+          '• `strategy`: Compaction strategy (summarize, consolidate, archive)\n' +
+          '• `preserve_decisions`: Keep decision messages (default: true)\n' +
+          '• `preserve_critical`: Keep critical messages (default: true)',
         
-        'ccp_archive_resolved': `📁 **Archive Resolved**\n\n` +
-          `Archive resolved messages automatically.\n\n` +
-          `**Optional Parameters:**\n` +
-          `• \`older_than_days\`: Archive messages older than N days (default: 30)\n` +
-          `• \`preserve_critical\`: Keep critical messages (default: true)\n` +
-          `• \`create_summary\`: Create summary before archiving (default: true)`,
+        'ccp_archive_resolved': '📁 **Archive Resolved**\n\n' +
+          'Archive resolved messages automatically.\n\n' +
+          '**Optional Parameters:**\n' +
+          '• `older_than_days`: Archive messages older than N days (default: 30)\n' +
+          '• `preserve_critical`: Keep critical messages (default: true)\n' +
+          '• `create_summary`: Create summary before archiving (default: true)',
         
-        'ccp_get_stats': `📊 **Get Statistics**\n\n` +
-          `Get coordination system statistics.\n\n` +
-          `**Optional Parameters:**\n` +
-          `• \`participant\`: Get stats for specific participant\n` +
-          `• \`timeframe_days\`: Timeframe for statistics (default: 7)`
+        'ccp_get_stats': '📊 **Get Statistics**\n\n' +
+          'Get coordination system statistics.\n\n' +
+          '**Optional Parameters:**\n' +
+          '• `participant`: Get stats for specific participant\n' +
+          '• `timeframe_days`: Timeframe for statistics (default: 7)'
       }
       
       const help = commandHelp[command]
@@ -835,33 +833,33 @@ export class CoordinationMCPServer {
       content: [
         {
           type: 'text',
-          text: `🤝 **Claude Coordination Protocol (CCP) Help**\n\n` +
-               `CCP enables efficient communication between Claude instances working on the same project.\n\n` +
-               `**Available Commands:**\n\n` +
-               `📤 \`ccp_send_message\` - Send coordination messages\n` +
-               `📨 \`ccp_get_messages\` - Retrieve messages with filters\n` +
-               `💬 \`ccp_respond_message\` - Respond to messages\n` +
-               `🔍 \`ccp_search_messages\` - Search message history\n` +
-               `🗜️ \`ccp_compact_thread\` - Optimize thread token usage\n` +
-               `📁 \`ccp_archive_resolved\` - Archive old messages\n` +
-               `📊 \`ccp_get_stats\` - View system statistics\n` +
-               `📝 \`ccp_register_participant\` - Register new participant\n` +
-               `👤 \`ccp_whoami\` - Show current identity\n` +
-               `📚 \`ccp_setup_guide\` - Setup and configuration guides\n\n` +
-               `**Message Types:**\n` +
-               `• \`arch\`: Architecture decisions\n` +
-               `• \`contract\`: API contracts & interfaces\n` +
-               `• \`sync\`: Synchronization requests\n` +
-               `• \`update\`: Status updates\n` +
-               `• \`q\`: Questions needing answers\n` +
-               `• \`emergency\`: Urgent issues\n` +
-               `• \`broadcast\`: Announcements to all\n\n` +
-               `**Priority Levels:**\n` +
-               `• \`CRITICAL\`: Immediate action required\n` +
-               `• \`H\`: High priority\n` +
-               `• \`M\`: Medium priority\n` +
-               `• \`L\`: Low priority\n\n` +
-               `💡 **Tip:** Use \`ccp_help command: <command_name>\` for detailed help on any command.`
+          text: '🤝 **Claude Coordination Protocol (CCP) Help**\n\n' +
+               'CCP enables efficient communication between Claude instances working on the same project.\n\n' +
+               '**Available Commands:**\n\n' +
+               '📤 `ccp_send_message` - Send coordination messages\n' +
+               '📨 `ccp_get_messages` - Retrieve messages with filters\n' +
+               '💬 `ccp_respond_message` - Respond to messages\n' +
+               '🔍 `ccp_search_messages` - Search message history\n' +
+               '🗜️ `ccp_compact_thread` - Optimize thread token usage\n' +
+               '📁 `ccp_archive_resolved` - Archive old messages\n' +
+               '📊 `ccp_get_stats` - View system statistics\n' +
+               '📝 `ccp_register_participant` - Register new participant\n' +
+               '👤 `ccp_whoami` - Show current identity\n' +
+               '📚 `ccp_setup_guide` - Setup and configuration guides\n\n' +
+               '**Message Types:**\n' +
+               '• `arch`: Architecture decisions\n' +
+               '• `contract`: API contracts & interfaces\n' +
+               '• `sync`: Synchronization requests\n' +
+               '• `update`: Status updates\n' +
+               '• `q`: Questions needing answers\n' +
+               '• `emergency`: Urgent issues\n' +
+               '• `broadcast`: Announcements to all\n\n' +
+               '**Priority Levels:**\n' +
+               '• `CRITICAL`: Immediate action required\n' +
+               '• `H`: High priority\n' +
+               '• `M`: Medium priority\n' +
+               '• `L`: Low priority\n\n' +
+               '💡 **Tip:** Use `ccp_help command: <command_name>` for detailed help on any command.'
         }
       ]
     }
@@ -871,141 +869,141 @@ export class CoordinationMCPServer {
     const topic = (args as any)?.topic || 'quickstart'
     
     const guides: Record<string, string> = {
-      'quickstart': `🚀 **Quick Start Guide**\n\n` +
-        `**1. Initialize CCP in your project:**\n` +
-        `\`\`\`bash\n` +
-        `npx claude-coordination-protocol init --participant-id @your-role\n` +
-        `\`\`\`\n\n` +
-        `**2. Verify setup:**\n` +
-        `\`\`\`bash\n` +
-        `npx claude-coordination-protocol status\n` +
-        `\`\`\`\n\n` +
-        `**3. Configure MCP in Claude Code:**\n` +
-        `The init command automatically updates your \`.mcp.json\`. Restart Claude Code to load CCP.\n\n` +
-        `**4. Start using CCP tools:**\n` +
-        `• Check your identity: \`ccp_whoami\`\n` +
-        `• Send first message: \`ccp_send_message\`\n` +
-        `• Check messages: \`ccp_get_messages\`\n\n` +
-        `**Example - Send a message:**\n` +
-        `\`\`\`json\n` +
-        `{\n` +
-        `  "to": ["@backend", "@mobile"],\n` +
-        `  "type": "sync",\n` +
-        `  "priority": "H",\n` +
-        `  "subject": "API endpoint changes",\n` +
-        `  "content": "Planning to update user auth endpoints..."\n` +
-        `}\n` +
-        `\`\`\``,
+      'quickstart': '🚀 **Quick Start Guide**\n\n' +
+        '**1. Initialize CCP in your project:**\n' +
+        '```bash\n' +
+        'npx claude-coordination-protocol init --participant-id @your-role\n' +
+        '```\n\n' +
+        '**2. Verify setup:**\n' +
+        '```bash\n' +
+        'npx claude-coordination-protocol status\n' +
+        '```\n\n' +
+        '**3. Configure MCP in Claude Code:**\n' +
+        'The init command automatically updates your `.mcp.json`. Restart Claude Code to load CCP.\n\n' +
+        '**4. Start using CCP tools:**\n' +
+        '• Check your identity: `ccp_whoami`\n' +
+        '• Send first message: `ccp_send_message`\n' +
+        '• Check messages: `ccp_get_messages`\n\n' +
+        '**Example - Send a message:**\n' +
+        '```json\n' +
+        '{\n' +
+        '  "to": ["@backend", "@mobile"],\n' +
+        '  "type": "sync",\n' +
+        '  "priority": "H",\n' +
+        '  "subject": "API endpoint changes",\n' +
+        '  "content": "Planning to update user auth endpoints..."\n' +
+        '}\n' +
+        '```',
       
-      'mcp_config': `⚙️ **MCP Configuration Guide**\n\n` +
-        `**Auto-generated .mcp.json entry:**\n` +
-        `\`\`\`json\n` +
-        `{\n` +
-        `  "mcpServers": {\n` +
-        `    "claude-coordination-protocol": {\n` +
-        `      "command": "ccp",\n` +
-        `      "args": ["server"],\n` +
-        `      "env": {\n` +
-        `        "CCP_CONFIG": ".coordination/config.yaml",\n` +
-        `        "CCP_PARTICIPANT_ID": "@your-role"\n` +
-        `      }\n` +
-        `    }\n` +
-        `  }\n` +
-        `}\n` +
-        `\`\`\`\n\n` +
-        `**Manual Installation:**\n` +
-        `1. Install globally: \`npm install -g claude-coordination-protocol\`\n` +
-        `2. Add the above configuration to your \`.mcp.json\`\n` +
-        `3. Restart Claude Code\n\n` +
-        `**Environment Variables:**\n` +
-        `• \`CCP_CONFIG\`: Path to config file\n` +
-        `• \`CCP_PARTICIPANT_ID\`: Your participant ID\n` +
-        `• \`CCP_DATA_DIR\`: Override data directory`,
+      'mcp_config': '⚙️ **MCP Configuration Guide**\n\n' +
+        '**Auto-generated .mcp.json entry:**\n' +
+        '```json\n' +
+        '{\n' +
+        '  "mcpServers": {\n' +
+        '    "claude-coordination-protocol": {\n' +
+        '      "command": "ccp",\n' +
+        '      "args": ["server"],\n' +
+        '      "env": {\n' +
+        '        "CCP_CONFIG": ".coordination/config.yaml",\n' +
+        '        "CCP_PARTICIPANT_ID": "@your-role"\n' +
+        '      }\n' +
+        '    }\n' +
+        '  }\n' +
+        '}\n' +
+        '```\n\n' +
+        '**Manual Installation:**\n' +
+        '1. Install globally: `npm install -g claude-coordination-protocol`\n' +
+        '2. Add the above configuration to your `.mcp.json`\n' +
+        '3. Restart Claude Code\n\n' +
+        '**Environment Variables:**\n' +
+        '• `CCP_CONFIG`: Path to config file\n' +
+        '• `CCP_PARTICIPANT_ID`: Your participant ID\n' +
+        '• `CCP_DATA_DIR`: Override data directory',
       
-      'participants': `👥 **Participant Management Guide**\n\n` +
-        `**Participant IDs:**\n` +
-        `• Must start with \`@\` (e.g., \`@backend\`, \`@mobile\`)\n` +
-        `• Use descriptive names for clarity\n` +
-        `• Examples: \`@api-team\`, \`@frontend-dev\`, \`@qa-tester\`\n\n` +
-        `**Adding Participants (CLI):**\n` +
-        `\`\`\`bash\n` +
-        `ccp participant add @mobile --capabilities "mobile,ios,android"\n` +
-        `ccp participant add @backend --capabilities "api,database,auth"\n` +
-        `\`\`\`\n\n` +
-        `**Capabilities:**\n` +
-        `Define what each participant can work on:\n` +
-        `• \`api\` - API development\n` +
-        `• \`database\` - Database management\n` +
-        `• \`frontend\` - Frontend development\n` +
-        `• \`mobile\` - Mobile app development\n` +
-        `• \`security\` - Security & authentication\n` +
-        `• \`infrastructure\` - DevOps & deployment\n` +
-        `• \`testing\` - QA & testing\n` +
-        `• \`documentation\` - Docs & guides\n\n` +
-        `**Status Management:**\n` +
-        `• \`active\` - Currently working\n` +
-        `• \`inactive\` - Not available\n` +
-        `• \`maintenance\` - Limited availability`,
+      'participants': '👥 **Participant Management Guide**\n\n' +
+        '**Participant IDs:**\n' +
+        '• Must start with `@` (e.g., `@backend`, `@mobile`)\n' +
+        '• Use descriptive names for clarity\n' +
+        '• Examples: `@api-team`, `@frontend-dev`, `@qa-tester`\n\n' +
+        '**Adding Participants (CLI):**\n' +
+        '```bash\n' +
+        'ccp participant add @mobile --capabilities "mobile,ios,android"\n' +
+        'ccp participant add @backend --capabilities "api,database,auth"\n' +
+        '```\n\n' +
+        '**Capabilities:**\n' +
+        'Define what each participant can work on:\n' +
+        '• `api` - API development\n' +
+        '• `database` - Database management\n' +
+        '• `frontend` - Frontend development\n' +
+        '• `mobile` - Mobile app development\n' +
+        '• `security` - Security & authentication\n' +
+        '• `infrastructure` - DevOps & deployment\n' +
+        '• `testing` - QA & testing\n' +
+        '• `documentation` - Docs & guides\n\n' +
+        '**Status Management:**\n' +
+        '• `active` - Currently working\n' +
+        '• `inactive` - Not available\n' +
+        '• `maintenance` - Limited availability',
       
-      'messaging': `💬 **Messaging Best Practices**\n\n` +
-        `**Message Types Usage:**\n` +
-        `• \`arch\` - Major design decisions affecting multiple teams\n` +
-        `• \`contract\` - API changes, interface definitions\n` +
-        `• \`sync\` - Need to coordinate on shared work\n` +
-        `• \`update\` - Progress reports, status changes\n` +
-        `• \`q\` - Questions needing answers\n` +
-        `• \`emergency\` - Blocking issues, critical bugs\n` +
-        `• \`broadcast\` - Team-wide announcements\n\n` +
-        `**Priority Guidelines:**\n` +
-        `• \`CRITICAL\` - Blocking work, production issues\n` +
-        `• \`H\` - Important, needs attention soon\n` +
-        `• \`M\` - Normal workflow, can wait\n` +
-        `• \`L\` - FYI, nice to know\n\n` +
-        `**SuperClaude Integration:**\n` +
-        `Include suggestions for the recipient:\n` +
-        `\`\`\`json\n` +
-        `{\n` +
-        `  "suggested_approach": {\n` +
-        `    "superclaude_commands": ["/sc:analyze", "/sc:improve"],\n` +
-        `    "superclaude_personas": ["--persona-security"],\n` +
-        `    "superclaude_flags": ["--think-hard", "--validate"],\n` +
-        `    "analysis_focus": ["authentication", "rate-limiting"],\n` +
-        `    "tools_recommended": ["Sequential", "Context7"]\n` +
-        `  }\n` +
-        `}\n` +
-        `\`\`\`\n\n` +
-        `**Thread Management:**\n` +
-        `• Messages auto-thread by subject similarity\n` +
-        `• Use \`ccp_compact_thread\` to reduce token usage\n` +
-        `• Archive resolved threads regularly`,
+      'messaging': '💬 **Messaging Best Practices**\n\n' +
+        '**Message Types Usage:**\n' +
+        '• `arch` - Major design decisions affecting multiple teams\n' +
+        '• `contract` - API changes, interface definitions\n' +
+        '• `sync` - Need to coordinate on shared work\n' +
+        '• `update` - Progress reports, status changes\n' +
+        '• `q` - Questions needing answers\n' +
+        '• `emergency` - Blocking issues, critical bugs\n' +
+        '• `broadcast` - Team-wide announcements\n\n' +
+        '**Priority Guidelines:**\n' +
+        '• `CRITICAL` - Blocking work, production issues\n' +
+        '• `H` - Important, needs attention soon\n' +
+        '• `M` - Normal workflow, can wait\n' +
+        '• `L` - FYI, nice to know\n\n' +
+        '**SuperClaude Integration:**\n' +
+        'Include suggestions for the recipient:\n' +
+        '```json\n' +
+        '{\n' +
+        '  "suggested_approach": {\n' +
+        '    "superclaude_commands": ["/sc:analyze", "/sc:improve"],\n' +
+        '    "superclaude_personas": ["--persona-security"],\n' +
+        '    "superclaude_flags": ["--think-hard", "--validate"],\n' +
+        '    "analysis_focus": ["authentication", "rate-limiting"],\n' +
+        '    "tools_recommended": ["Sequential", "Context7"]\n' +
+        '  }\n' +
+        '}\n' +
+        '```\n\n' +
+        '**Thread Management:**\n' +
+        '• Messages auto-thread by subject similarity\n' +
+        '• Use `ccp_compact_thread` to reduce token usage\n' +
+        '• Archive resolved threads regularly',
       
-      'troubleshooting': `🔧 **Troubleshooting Guide**\n\n` +
-        `**CCP not showing in Claude Code:**\n` +
-        `1. Check \`.mcp.json\` exists and has CCP entry\n` +
-        `2. Verify \`ccp\` command works in terminal\n` +
-        `3. Restart Claude Code completely\n` +
-        `4. Check for error messages in Claude Code logs\n\n` +
-        `**"Participant not found" errors:**\n` +
-        `1. Run \`ccp participant list\` to see registered participants\n` +
-        `2. Add missing participant: \`ccp participant add @missing\`\n` +
-        `3. Check participant ID format (must start with @)\n\n` +
-        `**Permission errors:**\n` +
-        `• Only admins can register new participants\n` +
-        `• Check file permissions on \`.coordination\` directory\n` +
-        `• Ensure write access to database file\n\n` +
-        `**Database locked errors:**\n` +
-        `• Another process may be using the database\n` +
-        `• Check for zombie CCP processes\n` +
-        `• Delete stale lock files in \`.coordination/locks\`\n\n` +
-        `**Message not delivered:**\n` +
-        `• Verify recipient participant exists\n` +
-        `• Check message expiry time\n` +
-        `• Ensure recipient has required capabilities\n\n` +
-        `**Reset CCP:**\n` +
-        `\`\`\`bash\n` +
-        `rm -rf .coordination\n` +
-        `ccp init --participant-id @your-role\n` +
-        `\`\`\``
+      'troubleshooting': '🔧 **Troubleshooting Guide**\n\n' +
+        '**CCP not showing in Claude Code:**\n' +
+        '1. Check `.mcp.json` exists and has CCP entry\n' +
+        '2. Verify `ccp` command works in terminal\n' +
+        '3. Restart Claude Code completely\n' +
+        '4. Check for error messages in Claude Code logs\n\n' +
+        '**"Participant not found" errors:**\n' +
+        '1. Run `ccp participant list` to see registered participants\n' +
+        '2. Add missing participant: `ccp participant add @missing`\n' +
+        '3. Check participant ID format (must start with @)\n\n' +
+        '**Permission errors:**\n' +
+        '• Only admins can register new participants\n' +
+        '• Check file permissions on `.coordination` directory\n' +
+        '• Ensure write access to database file\n\n' +
+        '**Database locked errors:**\n' +
+        '• Another process may be using the database\n' +
+        '• Check for zombie CCP processes\n' +
+        '• Delete stale lock files in `.coordination/locks`\n\n' +
+        '**Message not delivered:**\n' +
+        '• Verify recipient participant exists\n' +
+        '• Check message expiry time\n' +
+        '• Ensure recipient has required capabilities\n\n' +
+        '**Reset CCP:**\n' +
+        '```bash\n' +
+        'rm -rf .coordination\n' +
+        'ccp init --participant-id @your-role\n' +
+        '```'
     }
     
     const guide = guides[topic]
@@ -1015,12 +1013,12 @@ export class CoordinationMCPServer {
           {
             type: 'text',
             text: `❌ Unknown topic: ${topic}\n\n` +
-                 `Available topics:\n` +
-                 `• \`quickstart\` - Getting started quickly\n` +
-                 `• \`mcp_config\` - MCP configuration details\n` +
-                 `• \`participants\` - Managing participants\n` +
-                 `• \`messaging\` - Messaging best practices\n` +
-                 `• \`troubleshooting\` - Common issues and fixes`
+                 'Available topics:\n' +
+                 '• `quickstart` - Getting started quickly\n' +
+                 '• `mcp_config` - MCP configuration details\n' +
+                 '• `participants` - Managing participants\n' +
+                 '• `messaging` - Messaging best practices\n' +
+                 '• `troubleshooting` - Common issues and fixes'
           }
         ]
       }
@@ -1030,10 +1028,10 @@ export class CoordinationMCPServer {
       content: [
         {
           type: 'text',
-          text: guide + `\n\n📚 **More Help:**\n` +
-               `• Other topics: \`ccp_setup_guide topic: <topic>\`\n` +
-               `• Command help: \`ccp_help command: <command>\`\n` +
-               `• CLI help: \`ccp --help\``
+          text: guide + '\n\n📚 **More Help:**\n' +
+               '• Other topics: `ccp_setup_guide topic: <topic>`\n' +
+               '• Command help: `ccp_help command: <command>`\n' +
+               '• CLI help: `ccp --help`'
         }
       ]
     }
@@ -1144,7 +1142,7 @@ export class CoordinationMCPServer {
       // Format output
       let output = `📊 **Coordination Statistics (${results.timeframe})**\n\n`
       
-      output += `**Message Overview:**\n`
+      output += '**Message Overview:**\n'
       output += `• Total Messages: ${results.message_statistics.total_messages}\n`
       output += `• Recent Messages: ${results.message_statistics.recent_messages}\n`
       output += `• Response Rate: ${results.message_statistics.response_rate}%\n`
@@ -1154,18 +1152,18 @@ export class CoordinationMCPServer {
         output += `• Avg Response Time: ${results.activity_metrics.avg_response_time_hours}h\n`
       }
       
-      output += `\n**Message Types:**\n`
+      output += '\n**Message Types:**\n'
       results.message_types.forEach(t => {
         output += `• ${t.type}: ${t.count}\n`
       })
       
-      output += `\n**Priorities:**\n`
+      output += '\n**Priorities:**\n'
       results.priorities.forEach(p => {
         output += `• ${p.priority}: ${p.count}\n`
       })
       
       if (results.participants) {
-        output += `\n**Participants:**\n`
+        output += '\n**Participants:**\n'
         results.participants.forEach((p: any) => {
           const lastSeen = p.last_seen ? new Date(p.last_seen).toLocaleDateString() : 'never'
           output += `• ${p.participant_id} (${p.status}): ${p.messages_sent} sent, ${p.messages_received} received, last seen ${lastSeen}\n`

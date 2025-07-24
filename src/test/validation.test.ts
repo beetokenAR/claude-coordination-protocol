@@ -131,10 +131,10 @@ describe('Validation Utilities', () => {
   describe('validateMessageId', () => {
     it('should accept valid message IDs', () => {
       const validIds = [
-        'CONTRACT-001',
-        'ARCH-002',
-        'SYNC-123',
-        'UPDATE-999'
+        'CONTRACT-md4kl2p-ABC',
+        'ARCH-lg8q9r-XYZ',
+        'SYNC-n3m5t8-DEF',
+        'UPDATE-p7r2w4-GHI'
       ]
 
       for (const id of validIds) {
@@ -144,9 +144,11 @@ describe('Validation Utilities', () => {
 
     it('should reject invalid message IDs', () => {
       const invalidIds = [
-        'contract-001', // Lowercase type
-        'CONTRACT-1', // Not 3 digits
-        'CONTRACT-ABC', // Not numeric
+        'contract-md4kl2p-ABC', // Lowercase type
+        'CONTRACT-MD4KL2P-ABC', // Uppercase timestamp
+        'CONTRACT-md4kl2p-abc', // Lowercase random
+        'CONTRACT-md4kl2p-ABCD', // Too long random
+        'CONTRACT-md4kl2p-AB', // Too short random
         'INVALID_FORMAT',
         'CONTRACT'
       ]
@@ -304,8 +306,8 @@ describe('Validation Utilities', () => {
 
     it('should detect direct cycles', () => {
       const cyclicGetDependencies = (id: string): string[] => {
-        if (id === 'MSG-001') return ['MSG-002']
-        if (id === 'MSG-002') return ['MSG-001']
+        if (id === 'MSG-001') {return ['MSG-002']}
+        if (id === 'MSG-002') {return ['MSG-001']}
         return []
       }
 
@@ -316,9 +318,9 @@ describe('Validation Utilities', () => {
 
     it('should detect indirect cycles', () => {
       const cyclicGetDependencies = (id: string): string[] => {
-        if (id === 'MSG-001') return ['MSG-002']
-        if (id === 'MSG-002') return ['MSG-003']
-        if (id === 'MSG-003') return ['MSG-001']
+        if (id === 'MSG-001') {return ['MSG-002']}
+        if (id === 'MSG-002') {return ['MSG-003']}
+        if (id === 'MSG-003') {return ['MSG-001']}
         return []
       }
 
@@ -335,8 +337,8 @@ describe('Validation Utilities', () => {
 
     it('should include cycle information in error', () => {
       const cyclicGetDependencies = (id: string): string[] => {
-        if (id === 'MSG-001') return ['MSG-002']
-        if (id === 'MSG-002') return ['MSG-001']
+        if (id === 'MSG-001') {return ['MSG-002']}
+        if (id === 'MSG-002') {return ['MSG-001']}
         return []
       }
 

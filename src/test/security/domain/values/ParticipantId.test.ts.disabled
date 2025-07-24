@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { ParticipantId } from '../../../security/domain/values/ParticipantId.js'
+import { ParticipantId } from '../../../security/domain/values/ParticipantId.ts'
 
 describe('ParticipantId', () => {
   describe('create', () => {
@@ -54,7 +54,7 @@ describe('ParticipantId', () => {
         '@user/123', // slash
         '@user<123>', // angle brackets
         '@user"123"', // quotes
-        "@user'123'", // single quotes
+        '@user\'123\'', // single quotes
         '@user`123`', // backticks
         '@user,123', // comma
         '@user.123', // dot

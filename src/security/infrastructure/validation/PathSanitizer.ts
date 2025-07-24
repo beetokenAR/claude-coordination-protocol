@@ -15,13 +15,14 @@ export class PathSanitizer {
     /\.\.\\/g,        // Windows path traversal
     /\/\.\./g,        // Hidden path traversal
     /\\\.\./g,        // Windows hidden path traversal
+    // eslint-disable-next-line no-control-regex
     /\x00/g,          // Null bytes
     /[<>:"|?*]/g,     // Windows invalid chars
     /^\//,            // Absolute paths (Unix)
     /^[A-Za-z]:\\/,   // Absolute paths (Windows)
     /^\\\\[^\\]/,     // UNC paths
     /\/$/,            // Trailing slash
-    /\/{2,}/g,        // Multiple slashes
+    /\/{2,}/g        // Multiple slashes
   ]
 
   private static readonly MAX_PATH_LENGTH = 260 // Windows MAX_PATH
@@ -134,6 +135,7 @@ export class PathSanitizer {
     let sanitized = filename
 
     // Remover caracteres peligrosos
+    // eslint-disable-next-line no-control-regex
     sanitized = sanitized.replace(/[<>:"|?*\x00-\x1F]/g, '_')
 
     // Remover espacios al inicio y final
@@ -179,6 +181,7 @@ export class PathSanitizer {
     }
 
     // Verificar caracteres de control
+    // eslint-disable-next-line no-control-regex
     if (/[\x00-\x1F]/.test(input)) {
       throw new Error('Path contains control characters')
     }
@@ -269,6 +272,7 @@ export class PathSanitizer {
     }
 
     // Verificar caracteres peligrosos
+    // eslint-disable-next-line no-control-regex
     if (/[<>:"|?*\x00-\x1F]/.test(component)) {
       throw new Error('Path component contains invalid characters')
     }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { CoordinationDatabase } from '../database/connection.js'
 import { ParticipantRegistry } from '../core/participant-registry.js'
-import { TEST_DATA_DIR } from './setup.js'
+import { getCurrentTestDir } from './setup.js'
 import type { ParticipantId } from '../types/index.js'
 
 describe('ParticipantRegistry', () => {
@@ -11,8 +11,9 @@ describe('ParticipantRegistry', () => {
   const adminParticipant: ParticipantId = '@admin'
 
   beforeEach(() => {
-    db = new CoordinationDatabase(TEST_DATA_DIR)
-    participantRegistry = new ParticipantRegistry(db, TEST_DATA_DIR)
+    const testDir = getCurrentTestDir()
+    db = new CoordinationDatabase(testDir)
+    participantRegistry = new ParticipantRegistry(db, testDir)
   })
 
   describe('registerParticipant', () => {

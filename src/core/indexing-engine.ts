@@ -5,7 +5,6 @@ import {
   SearchMessagesInput,
   SearchResult,
   ParticipantId,
-  MessageFilters,
   DatabaseError
 } from '../types/index.js'
 
@@ -29,21 +28,21 @@ export class IndexingEngine {
       SELECT m.*, fts.rank
       FROM messages_fts fts
       JOIN messages m ON m.id = fts.id
-      WHERE messages_fts MATCH ?
-      AND ($participant IS NULL OR m.from_participant = $participant OR json_extract(m.to_participants, '$[*]') LIKE '%' || $participant || '%')
+      WHERE messages_fts MATCH $query
+      AND ($participant IS NULL OR m.from_participant = $participant OR m.to_participants LIKE '%"' || $participant || '"%')
       AND ($dateFrom IS NULL OR m.created_at >= $dateFrom)
       AND ($dateTo IS NULL OR m.created_at <= $dateTo)
       ORDER BY fts.rank, m.created_at DESC
-      LIMIT ?
+      LIMIT $limit
     `)
     
     // Search by tags using JSON operations
     this.searchMessagesByTags = this.db.prepare(`
       SELECT * FROM messages
-      WHERE ($participant IS NULL OR from_participant = $participant OR json_extract(to_participants, '$[*]') LIKE '%' || $participant || '%')
+      WHERE ($participant IS NULL OR from_participant = $participant OR to_participants LIKE '%"' || $participant || '"%')
       AND ($tags IS NULL OR EXISTS (
         SELECT 1 FROM json_each($tags) tag
-        WHERE json_extract(messages.tags, '$[*]') LIKE '%' || tag.value || '%'
+        WHERE messages.tags LIKE '%"' || tag.value || '"%'
       ))
       AND ($dateFrom IS NULL OR created_at >= $dateFrom)
       AND ($dateTo IS NULL OR created_at <= $dateTo)
@@ -55,7 +54,7 @@ export class IndexingEngine {
           WHEN 'L' THEN 4
         END,
         created_at DESC
-      LIMIT ?
+      LIMIT $limit
     `)
     
     // Update message tags for indexing
@@ -78,13 +77,13 @@ export class IndexingEngine {
       
       if (validated.semantic && validated.query.trim()) {
         // Full-text search
-        results = this.searchMessagesFTS.all(
-          this.prepareFTSQuery(validated.query),
-          requestingParticipant,
-          validated.date_range?.from?.toISOString() || null,
-          validated.date_range?.to?.toISOString() || null,
-          validated.limit
-        )
+        results = this.searchMessagesFTS.all({
+          query: this.prepareFTSQuery(validated.query),
+          participant: requestingParticipant,
+          dateFrom: validated.date_range?.from?.toISOString() || null,
+          dateTo: validated.date_range?.to?.toISOString() || null,
+          limit: validated.limit
+        })
       } else if (validated.tags && validated.tags.length > 0) {
         // Tag-based search
         results = this.searchMessagesByTags.all({
@@ -100,7 +99,7 @@ export class IndexingEngine {
         if (keywordQuery) {
           results = this.db.prepare(`
             SELECT * FROM messages
-            WHERE (from_participant = ? OR json_extract(to_participants, '$[*]') LIKE '%' || ? || '%')
+            WHERE (from_participant = ? OR to_participants LIKE '%"' || ? || '"%')
             AND (subject LIKE '%' || ? || '%' OR summary LIKE '%' || ? || '%')
             AND (? IS NULL OR created_at >= ?)
             AND (? IS NULL OR created_at <= ?)
@@ -109,8 +108,10 @@ export class IndexingEngine {
           `).all(
             requestingParticipant, requestingParticipant,
             keywordQuery, keywordQuery,
-            validated.date_range?.from?.toISOString() || null, validated.date_range?.from?.toISOString() || null,
-            validated.date_range?.to?.toISOString() || null, validated.date_range?.to?.toISOString() || null,
+            validated.date_range?.from?.toISOString() || null,
+            validated.date_range?.from?.toISOString() || null,
+            validated.date_range?.to?.toISOString() || null,
+            validated.date_range?.to?.toISOString() || null,
             validated.limit
           )
         }
@@ -169,7 +170,7 @@ export class IndexingEngine {
       const results = this.db.prepare(`
         SELECT DISTINCT tag.value as tag, COUNT(*) as usage_count
         FROM messages m, json_each(m.tags) tag
-        WHERE (m.from_participant = ? OR json_extract(m.to_participants, '$[*]') LIKE '%' || ? || '%')
+        WHERE (m.from_participant = ? OR m.to_participants LIKE '%"' || ? || '"%')
         AND tag.value LIKE '%' || ? || '%'
         GROUP BY tag.value
         ORDER BY usage_count DESC, tag.value
@@ -209,7 +210,7 @@ export class IndexingEngine {
       // Get message counts
       const totalMessages = this.db.prepare(`
         SELECT COUNT(*) as count FROM messages
-        WHERE (from_participant = ? OR json_extract(to_participants, '$[*]') LIKE '%' || ? || '%')
+        WHERE (from_participant = ? OR to_participants LIKE '%"' || ? || '"%')
         AND created_at >= ?
       `).get(participantId, participantId, since.toISOString()) as { count: number }
       
@@ -223,7 +224,7 @@ export class IndexingEngine {
       // Get distribution by type
       const byType = this.db.prepare(`
         SELECT type, COUNT(*) as count FROM messages
-        WHERE (from_participant = ? OR json_extract(to_participants, '$[*]') LIKE '%' || ? || '%')
+        WHERE (from_participant = ? OR to_participants LIKE '%"' || ? || '"%')
         AND created_at >= ?
         GROUP BY type
       `).all(participantId, participantId, since.toISOString()) as Array<{ type: string, count: number }>
@@ -231,7 +232,7 @@ export class IndexingEngine {
       // Get distribution by priority
       const byPriority = this.db.prepare(`
         SELECT priority, COUNT(*) as count FROM messages
-        WHERE (from_participant = ? OR json_extract(to_participants, '$[*]') LIKE '%' || ? || '%')
+        WHERE (from_participant = ? OR to_participants LIKE '%"' || ? || '"%')
         AND created_at >= ?
         GROUP BY priority
       `).all(participantId, participantId, since.toISOString()) as Array<{ priority: string, count: number }>
@@ -239,7 +240,7 @@ export class IndexingEngine {
       // Get distribution by status
       const byStatus = this.db.prepare(`
         SELECT status, COUNT(*) as count FROM messages
-        WHERE (from_participant = ? OR json_extract(to_participants, '$[*]') LIKE '%' || ? || '%')
+        WHERE (from_participant = ? OR to_participants LIKE '%"' || ? || '"%')
         AND created_at >= ?
         GROUP BY status
       `).all(participantId, participantId, since.toISOString()) as Array<{ status: string, count: number }>
@@ -255,7 +256,7 @@ export class IndexingEngine {
             END
           ) as avg_response_hours
         FROM messages
-        WHERE json_extract(to_participants, '$[*]') LIKE '%' || ? || '%'
+        WHERE to_participants LIKE '%"' || ? || '"%'
         AND response_required = 1
         AND created_at >= ?
       `).get(participantId, since.toISOString()) as {
@@ -311,13 +312,13 @@ export class IndexingEngine {
       }
       
       const query = keywords.join(' OR ')
-      const results = this.searchMessagesFTS.all(
-        query,
-        requestingParticipant,
-        null, // No date filter
-        null, // No date filter
-        limit + 1 // +1 to exclude the original message
-      )
+      const results = this.searchMessagesFTS.all({
+        query: query,
+        participant: requestingParticipant,
+        dateFrom: null, // No date filter
+        dateTo: null, // No date filter
+        limit: limit + 1 // +1 to exclude the original message
+      })
       
       // Filter out the original message and convert to SearchResult
       return results

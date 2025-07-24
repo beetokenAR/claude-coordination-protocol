@@ -5,7 +5,7 @@
 
 import { ParticipantId } from '../../domain/values/ParticipantId.js'
 import { SecureParticipant } from '../../domain/entities/SecureParticipant.js'
-import { SecurityLevel } from '../../domain/values/SecurityLevel.js'
+// import { SecurityLevel } from '../../domain/values/SecurityLevel.js'
 import { IParticipantRepository } from '../interfaces/IParticipantRepository.js'
 import { IAuditService } from '../interfaces/IAuditService.js'
 
