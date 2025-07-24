@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "claude-coordination-protocol": {
+      "command": "ccp",
+      "args": ["server"],
+      "env": {
+        "CCP_CONFIG": ".coordination/config.yaml",
+        "CCP_PARTICIPANT_ID": "@backend"
+      }
+    }
+  }
+}

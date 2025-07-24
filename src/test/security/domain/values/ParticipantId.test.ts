@@ -1,0 +1,258 @@
+/**
+ * @fileoverview Tests for ParticipantId value object
+ */
+
+import { describe, it, expect } from 'vitest'
+import { ParticipantId } from '../../../security/domain/values/ParticipantId.js'
+
+describe('ParticipantId', () => {
+  describe('create', () => {
+    it('should create valid participant ID', () => {
+      const validIds = [
+        '@user123',
+        '@backend_service',
+        '@mobile-app',
+        '@a1',
+        '@test_user_with_long_name123'
+      ]
+
+      validIds.forEach(id => {
+        const participantId = ParticipantId.create(id)
+        expect(participantId.value).toBe(id)
+      })
+    })
+
+    it('should reject empty or null values', () => {
+      expect(() => ParticipantId.create('')).toThrow('ParticipantId no puede estar vacío')
+      expect(() => ParticipantId.create(' ')).toThrow('ParticipantId debe comenzar con @ seguido de 1-30 caracteres')
+    })
+
+    it('should reject IDs not starting with @', () => {
+      const invalidIds = ['user123', 'backend', 'mobile-app']
+      
+      invalidIds.forEach(id => {
+        expect(() => ParticipantId.create(id))
+          .toThrow('ParticipantId debe comenzar con @ seguido de 1-30 caracteres alfanuméricos')
+      })
+    })
+
+    it('should reject IDs with invalid characters', () => {
+      const invalidIds = [
+        '@user 123', // space
+        '@user@123', // @
+        '@user#123', // #
+        '@user$123', // $
+        '@user%123', // %
+        '@user&123', // &
+        '@user*123', // *
+        '@user+123', // +
+        '@user=123', // =
+        '@user[123]', // brackets
+        '@user{123}', // braces
+        '@user|123', // pipe
+        '@user\\123', // backslash
+        '@user/123', // slash
+        '@user<123>', // angle brackets
+        '@user"123"', // quotes
+        "@user'123'", // single quotes
+        '@user`123`', // backticks
+        '@user,123', // comma
+        '@user.123', // dot
+        '@user?123', // question mark
+        '@user!123', // exclamation
+        '@user:123', // colon
+        '@user;123' // semicolon
+      ]
+
+      invalidIds.forEach(id => {
+        expect(() => ParticipantId.create(id))
+          .toThrow('ParticipantId contiene caracteres peligrosos')
+      })
+    })
+
+    it('should reject IDs that are too long', () => {
+      const longId = '@' + 'a'.repeat(31) // 32 characters total
+      expect(() => ParticipantId.create(longId))
+        .toThrow('ParticipantId debe comenzar con @ seguido de 1-30 caracteres')
+    })
+
+    it('should reject IDs that are too short', () => {
+      expect(() => ParticipantId.create('@'))
+        .toThrow('ParticipantId debe comenzar con @ seguido de 1-30 caracteres')
+    })
+
+    it('should reject reserved IDs', () => {
+      const reservedIds = [
+        '@system',
+        '@admin', 
+        '@root',
+        '@null',
+        '@undefined',
+        '@SYSTEM', // case insensitive
+        '@Admin',
+        '@ROOT'
+      ]
+
+      reservedIds.forEach(id => {
+        expect(() => ParticipantId.create(id))
+          .toThrow(`ParticipantId ${id} está reservado`)
+      })
+    })
+
+    it('should reject IDs with SQL injection patterns', () => {
+      const sqlInjectionIds = [
+        '@user; DROP TABLE users;--',
+        '@user UNION SELECT',
+        '@user INSERT INTO',
+        '@user UPDATE SET',
+        '@user DELETE FROM'
+      ]
+
+      sqlInjectionIds.forEach(id => {
+        expect(() => ParticipantId.create(id))
+          .toThrow('ParticipantId contiene palabras SQL reservadas')
+      })
+    })
+
+    it('should reject IDs with dangerous command injection characters', () => {
+      const dangerousIds = [
+        '@user$(whoami)',
+        '@user`ls -la`',
+        '@user;ls',
+        '@user|cat',
+        '@user&&rm',
+        '@user||echo'
+      ]
+
+      dangerousIds.forEach(id => {
+        expect(() => ParticipantId.create(id))
+          .toThrow('ParticipantId contiene caracteres peligrosos')
+      })
+    })
+  })
+
+  describe('value operations', () => {
+    it('should return correct value', () => {
+      const id = '@test_user'
+      const participantId = ParticipantId.create(id)
+      expect(participantId.value).toBe(id)
+    })
+
+    it('should implement equals correctly', () => {
+      const id1 = ParticipantId.create('@user1')
+      const id2 = ParticipantId.create('@user1')
+      const id3 = ParticipantId.create('@user2')
+
+      expect(id1.equals(id2)).toBe(true)
+      expect(id1.equals(id3)).toBe(false)
+    })
+
+    it('should implement toString correctly', () => {
+      const id = '@test_user'
+      const participantId = ParticipantId.create(id)
+      expect(participantId.toString()).toBe(id)
+    })
+
+    it('should implement toJSON correctly', () => {
+      const id = '@test_user'
+      const participantId = ParticipantId.create(id)
+      expect(participantId.toJSON()).toBe(id)
+      expect(JSON.stringify(participantId)).toBe(`"${id}"`)
+    })
+  })
+
+  describe('edge cases', () => {
+    it('should handle minimum valid length', () => {
+      const minId = '@a1'
+      const participantId = ParticipantId.create(minId)
+      expect(participantId.value).toBe(minId)
+    })
+
+    it('should handle maximum valid length', () => {
+      const maxId = '@' + 'a'.repeat(30) // 31 characters total
+      const participantId = ParticipantId.create(maxId)
+      expect(participantId.value).toBe(maxId)
+    })
+
+    it('should handle mixed case correctly', () => {
+      const mixedId = '@User_123'
+      const participantId = ParticipantId.create(mixedId)
+      expect(participantId.value).toBe(mixedId)
+    })
+
+    it('should handle numbers and underscores', () => {
+      const numericId = '@user_123_test'
+      const participantId = ParticipantId.create(numericId)
+      expect(participantId.value).toBe(numericId)
+    })
+
+    it('should handle hyphens correctly', () => {
+      const hyphenId = '@user-service-v2'
+      const participantId = ParticipantId.create(hyphenId)
+      expect(participantId.value).toBe(hyphenId)
+    })
+
+    it('should not allow ID starting with numbers after @', () => {
+      expect(() => ParticipantId.create('@123user'))
+        .toThrow('ParticipantId debe comenzar con @ seguido de 1-30 caracteres alfanuméricos')
+    })
+
+    it('should not allow ID ending with special characters', () => {
+      expect(() => ParticipantId.create('@user_'))
+        .not.toThrow() // underscore at end is allowed
+      
+      expect(() => ParticipantId.create('@user-'))
+        .not.toThrow() // hyphen at end is allowed
+    })
+  })
+
+  describe('security validation', () => {
+    it('should prevent XSS attempts', () => {
+      const xssAttempts = [
+        '@user<script>',
+        '@user<img>',
+        '@user</script>',
+        '@user</',
+        '@user>'
+      ]
+
+      xssAttempts.forEach(id => {
+        expect(() => ParticipantId.create(id))
+          .toThrow('ParticipantId contiene caracteres peligrosos')
+      })
+    })
+
+    it('should prevent path traversal attempts', () => {
+      const pathTraversalAttempts = [
+        '@../admin',
+        '@user/../',
+        '@..user',
+        '@user..'
+      ]
+
+      pathTraversalAttempts.forEach(id => {
+        expect(() => ParticipantId.create(id))
+          .toThrow() // Should fail validation
+      })
+    })
+
+    it('should prevent null byte injection', () => {
+      expect(() => ParticipantId.create('@user\x00admin'))
+        .toThrow('ParticipantId contiene caracteres peligrosos')
+    })
+
+    it('should prevent control character injection', () => {
+      const controlChars = [
+        '@user\n',
+        '@user\r',
+        '@user\t',
+        '@user\x1b'
+      ]
+
+      controlChars.forEach(id => {
+        expect(() => ParticipantId.create(id))
+          .toThrow('ParticipantId contiene caracteres peligrosos')
+      })
+    })
+  })
+})

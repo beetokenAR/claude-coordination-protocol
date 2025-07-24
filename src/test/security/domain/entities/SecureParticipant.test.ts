@@ -1,0 +1,458 @@
+/**
+ * @fileoverview Tests for SecureParticipant entity
+ */
+
+import { describe, it, expect, beforeEach } from 'vitest'
+import { SecureParticipant } from '../../../security/domain/entities/SecureParticipant.js'
+import { ParticipantId } from '../../../security/domain/values/ParticipantId.js'
+import { SecurityLevel } from '../../../security/domain/values/SecurityLevel.js'
+import { Permission } from '../../../security/domain/values/Permission.js'
+
+describe('SecureParticipant', () => {
+  let participantId: ParticipantId
+  let basicCapabilities: string[]
+  let adminCapabilities: string[]
+
+  beforeEach(() => {
+    participantId = ParticipantId.create('@test_user')
+    basicCapabilities = ['coordination']
+    adminCapabilities = ['coordination', 'admin']
+  })
+
+  describe('create', () => {
+    it('should create participant with basic capabilities', () => {
+      const participant = SecureParticipant.create(
+        participantId,
+        basicCapabilities,
+        SecurityLevel.STANDARD
+      )
+
+      expect(participant.id).toBe(participantId)
+      expect(participant.capabilities).toEqual(new Set(basicCapabilities))
+      expect(participant.securityLevel).toBe(SecurityLevel.STANDARD)
+      expect(participant.isActive).toBe(true)
+      expect(participant.failedAttempts).toBe(0)
+      expect(participant.isLocked).toBe(false)
+    })
+
+    it('should create participant with default security level', () => {
+      const participant = SecureParticipant.create(participantId, basicCapabilities)
+
+      expect(participant.securityLevel).toBe(SecurityLevel.STANDARD)
+    })
+
+    it('should derive permissions from capabilities correctly', () => {
+      const participant = SecureParticipant.create(participantId, basicCapabilities)
+
+      expect(participant.permissions.has(Permission.SEND_MESSAGE)).toBe(true)
+      expect(participant.permissions.has(Permission.READ_MESSAGE)).toBe(true)
+      expect(participant.permissions.has(Permission.RESPOND_MESSAGE)).toBe(true)
+      expect(participant.permissions.has(Permission.READ_OWN_MESSAGES)).toBe(true)
+    })
+
+    it('should derive admin permissions correctly', () => {
+      const participant = SecureParticipant.create(participantId, adminCapabilities)
+
+      expect(participant.permissions.has(Permission.REGISTER_PARTICIPANT)).toBe(true)
+      expect(participant.permissions.has(Permission.MANAGE_PARTICIPANTS)).toBe(true)
+      expect(participant.permissions.has(Permission.VIEW_AUDIT_LOGS)).toBe(true)
+      expect(participant.permissions.has(Permission.COMPACT_THREADS)).toBe(true)
+      expect(participant.permissions.has(Permission.ARCHIVE_MESSAGES)).toBe(true)
+    })
+
+    it('should include default permissions for all participants', () => {
+      const participant = SecureParticipant.create(participantId, [])
+
+      expect(participant.permissions.has(Permission.READ_OWN_MESSAGES)).toBe(true)
+    })
+
+    it('should handle multiple capabilities', () => {
+      const multiCapabilities = ['coordination', 'maintenance', 'security']
+      const participant = SecureParticipant.create(participantId, multiCapabilities)
+
+      // Should have coordination permissions
+      expect(participant.permissions.has(Permission.SEND_MESSAGE)).toBe(true)
+      // Should have maintenance permissions
+      expect(participant.permissions.has(Permission.COMPACT_THREADS)).toBe(true)
+      // Should have security permissions
+      expect(participant.permissions.has(Permission.VIEW_AUDIT_LOGS)).toBe(true)
+      expect(participant.permissions.has(Permission.MANAGE_SECURITY_POLICIES)).toBe(true)
+    })
+
+    it('should set lastSeen to current time', () => {
+      const beforeCreate = new Date()
+      const participant = SecureParticipant.create(participantId, basicCapabilities)
+      const afterCreate = new Date()
+
+      expect(participant.lastSeen.getTime()).toBeGreaterThanOrEqual(beforeCreate.getTime())
+      expect(participant.lastSeen.getTime()).toBeLessThanOrEqual(afterCreate.getTime())
+    })
+  })
+
+  describe('reconstitute', () => {
+    it('should reconstitute participant from stored data', () => {
+      const lastSeen = new Date('2024-01-01T12:00:00Z')
+      const participant = SecureParticipant.reconstitute(
+        participantId,
+        basicCapabilities,
+        SecurityLevel.ELEVATED,
+        lastSeen,
+        true,
+        2,
+        new Date('2024-01-01T13:00:00Z')
+      )
+
+      expect(participant.id).toBe(participantId)
+      expect(participant.capabilities).toEqual(new Set(basicCapabilities))
+      expect(participant.securityLevel).toBe(SecurityLevel.ELEVATED)
+      expect(participant.lastSeen).toBe(lastSeen)
+      expect(participant.isActive).toBe(true)
+      expect(participant.failedAttempts).toBe(2)
+      expect(participant.isLocked).toBe(true) // locked until future date
+    })
+
+    it('should reconstitute inactive participant', () => {
+      const participant = SecureParticipant.reconstitute(
+        participantId,
+        basicCapabilities,
+        SecurityLevel.STANDARD,
+        new Date(),
+        false, // inactive
+        0
+      )
+
+      expect(participant.isActive).toBe(false)
+      expect(participant.isLocked).toBe(false)
+    })
+
+    it('should reconstitute participant without lock', () => {
+      const participant = SecureParticipant.reconstitute(
+        participantId,
+        basicCapabilities,
+        SecurityLevel.STANDARD,
+        new Date(),
+        true,
+        3
+        // no lockedUntil parameter
+      )
+
+      expect(participant.isLocked).toBe(false)
+      expect(participant.failedAttempts).toBe(3)
+    })
+  })
+
+  describe('canPerformAction', () => {
+    let participant: SecureParticipant
+
+    beforeEach(() => {
+      participant = SecureParticipant.create(participantId, basicCapabilities)
+    })
+
+    it('should allow action when participant is active and has permission', () => {
+      expect(participant.canPerformAction(Permission.SEND_MESSAGE)).toBe(true)
+    })
+
+    it('should deny action when participant is inactive', () => {
+      participant.deactivate()
+      expect(participant.canPerformAction(Permission.SEND_MESSAGE)).toBe(false)
+    })
+
+    it('should deny action when participant is locked', () => {
+      // Lock the participant by recording failed attempts
+      for (let i = 0; i < 5; i++) {
+        participant.recordFailedAttempt()
+      }
+      expect(participant.isLocked).toBe(true)
+      expect(participant.canPerformAction(Permission.SEND_MESSAGE)).toBe(false)
+    })
+
+    it('should deny action when participant lacks permission', () => {
+      expect(participant.canPerformAction(Permission.SYSTEM_ADMIN)).toBe(false)
+    })
+
+    it('should allow action for admin with admin permissions', () => {
+      const adminParticipant = SecureParticipant.create(
+        ParticipantId.create('@admin_user'),
+        adminCapabilities
+      )
+
+      expect(adminParticipant.canPerformAction(Permission.MANAGE_PARTICIPANTS)).toBe(true)
+    })
+  })
+
+  describe('hasCapability', () => {
+    let participant: SecureParticipant
+
+    beforeEach(() => {
+      participant = SecureParticipant.create(participantId, ['coordination', 'maintenance'])
+    })
+
+    it('should return true for existing capabilities', () => {
+      expect(participant.hasCapability('coordination')).toBe(true)
+      expect(participant.hasCapability('maintenance')).toBe(true)
+    })
+
+    it('should return false for non-existing capabilities', () => {
+      expect(participant.hasCapability('admin')).toBe(false)
+      expect(participant.hasCapability('security')).toBe(false)
+    })
+
+    it('should be case sensitive', () => {
+      expect(participant.hasCapability('Coordination')).toBe(false)
+      expect(participant.hasCapability('MAINTENANCE')).toBe(false)
+    })
+  })
+
+  describe('updateLastSeen', () => {
+    let participant: SecureParticipant
+
+    beforeEach(() => {
+      participant = SecureParticipant.create(participantId, basicCapabilities)
+    })
+
+    it('should update lastSeen timestamp', () => {
+      const originalLastSeen = participant.lastSeen
+      
+      // Wait a bit to ensure timestamp difference
+      setTimeout(() => {
+        participant.updateLastSeen()
+        expect(participant.lastSeen.getTime()).toBeGreaterThan(originalLastSeen.getTime())
+      }, 10)
+    })
+
+    it('should reset failed attempts on successful activity', () => {
+      participant.recordFailedAttempt()
+      participant.recordFailedAttempt()
+      expect(participant.failedAttempts).toBe(2)
+
+      participant.updateLastSeen()
+      expect(participant.failedAttempts).toBe(0)
+    })
+  })
+
+  describe('recordFailedAttempt', () => {
+    let participant: SecureParticipant
+
+    beforeEach(() => {
+      participant = SecureParticipant.create(participantId, basicCapabilities)
+    })
+
+    it('should increment failed attempts counter', () => {
+      expect(participant.failedAttempts).toBe(0)
+      
+      participant.recordFailedAttempt()
+      expect(participant.failedAttempts).toBe(1)
+      
+      participant.recordFailedAttempt()
+      expect(participant.failedAttempts).toBe(2)
+    })
+
+    it('should lock participant after 5 failed attempts', () => {
+      expect(participant.isLocked).toBe(false)
+      
+      // Record 4 failed attempts - should not be locked
+      for (let i = 0; i < 4; i++) {
+        participant.recordFailedAttempt()
+      }
+      expect(participant.isLocked).toBe(false)
+      expect(participant.failedAttempts).toBe(4)
+      
+      // 5th attempt should lock the participant
+      participant.recordFailedAttempt()
+      expect(participant.isLocked).toBe(true)
+      expect(participant.failedAttempts).toBe(5)
+    })
+
+    it('should maintain lock after additional failed attempts', () => {
+      // Lock the participant
+      for (let i = 0; i < 5; i++) {
+        participant.recordFailedAttempt()
+      }
+      expect(participant.isLocked).toBe(true)
+      
+      // Additional attempts should keep it locked
+      participant.recordFailedAttempt()
+      expect(participant.isLocked).toBe(true)
+      expect(participant.failedAttempts).toBe(6)
+    })
+  })
+
+  describe('deactivate and activate', () => {
+    let participant: SecureParticipant
+
+    beforeEach(() => {
+      participant = SecureParticipant.create(participantId, basicCapabilities)
+    })
+
+    it('should deactivate participant', () => {
+      expect(participant.isActive).toBe(true)
+      
+      participant.deactivate()
+      expect(participant.isActive).toBe(false)
+    })
+
+    it('should activate participant and reset security state', () => {
+      // First, deactivate and lock the participant
+      participant.deactivate()
+      for (let i = 0; i < 5; i++) {
+        participant.recordFailedAttempt()
+      }
+      expect(participant.isActive).toBe(false)
+      expect(participant.isLocked).toBe(true)
+      expect(participant.failedAttempts).toBe(5)
+      
+      // Activate should reset everything
+      participant.activate()
+      expect(participant.isActive).toBe(true)
+      expect(participant.isLocked).toBe(false)
+      expect(participant.failedAttempts).toBe(0)
+    })
+  })
+
+  describe('isLocked property', () => {
+    let participant: SecureParticipant
+
+    beforeEach(() => {
+      participant = SecureParticipant.create(participantId, basicCapabilities)
+    })
+
+    it('should return false when not locked', () => {
+      expect(participant.isLocked).toBe(false)
+    })
+
+    it('should return true when locked due to failed attempts', () => {
+      for (let i = 0; i < 5; i++) {
+        participant.recordFailedAttempt()
+      }
+      expect(participant.isLocked).toBe(true)
+    })
+
+    it('should handle future lock expiration', () => {
+      // Create participant with lock in the past (should be unlocked)
+      const pastLock = new Date(Date.now() - 60000) // 1 minute ago
+      const unlockedParticipant = SecureParticipant.reconstitute(
+        participantId,
+        basicCapabilities,
+        SecurityLevel.STANDARD,
+        new Date(),
+        true,
+        5,
+        pastLock
+      )
+      expect(unlockedParticipant.isLocked).toBe(false)
+      
+      // Create participant with lock in the future (should be locked)
+      const futureLock = new Date(Date.now() + 60000) // 1 minute from now
+      const lockedParticipant = SecureParticipant.reconstitute(
+        participantId,
+        basicCapabilities,
+        SecurityLevel.STANDARD,
+        new Date(),
+        true,
+        5,
+        futureLock
+      )
+      expect(lockedParticipant.isLocked).toBe(true)
+    })
+  })
+
+  describe('capability to permission mapping', () => {
+    it('should map coordination capability correctly', () => {
+      const participant = SecureParticipant.create(participantId, ['coordination'])
+      
+      expect(participant.permissions.has(Permission.SEND_MESSAGE)).toBe(true)
+      expect(participant.permissions.has(Permission.READ_MESSAGE)).toBe(true)
+      expect(participant.permissions.has(Permission.RESPOND_MESSAGE)).toBe(true)
+      expect(participant.permissions.has(Permission.READ_OWN_MESSAGES)).toBe(true)
+    })
+
+    it('should map admin capability correctly', () => {
+      const participant = SecureParticipant.create(participantId, ['admin'])
+      
+      expect(participant.permissions.has(Permission.REGISTER_PARTICIPANT)).toBe(true)
+      expect(participant.permissions.has(Permission.MANAGE_PARTICIPANTS)).toBe(true)
+      expect(participant.permissions.has(Permission.VIEW_AUDIT_LOGS)).toBe(true)
+      expect(participant.permissions.has(Permission.COMPACT_THREADS)).toBe(true)
+      expect(participant.permissions.has(Permission.ARCHIVE_MESSAGES)).toBe(true)
+    })
+
+    it('should map maintenance capability correctly', () => {
+      const participant = SecureParticipant.create(participantId, ['maintenance'])
+      
+      expect(participant.permissions.has(Permission.COMPACT_THREADS)).toBe(true)
+      expect(participant.permissions.has(Permission.ARCHIVE_MESSAGES)).toBe(true)
+      expect(participant.permissions.has(Permission.READ_OWN_MESSAGES)).toBe(true)
+    })
+
+    it('should map security capability correctly', () => {
+      const participant = SecureParticipant.create(participantId, ['security'])
+      
+      expect(participant.permissions.has(Permission.VIEW_AUDIT_LOGS)).toBe(true)
+      expect(participant.permissions.has(Permission.MANAGE_SECURITY_POLICIES)).toBe(true)
+      expect(participant.permissions.has(Permission.READ_OWN_MESSAGES)).toBe(true)
+    })
+
+    it('should handle unknown capabilities gracefully', () => {
+      const participant = SecureParticipant.create(participantId, ['unknown_capability'])
+      
+      // Should still have default permissions
+      expect(participant.permissions.has(Permission.READ_OWN_MESSAGES)).toBe(true)
+      expect(participant.permissions.size).toBe(1)
+    })
+
+    it('should handle empty capabilities', () => {
+      const participant = SecureParticipant.create(participantId, [])
+      
+      // Should only have default permissions
+      expect(participant.permissions.has(Permission.READ_OWN_MESSAGES)).toBe(true)
+      expect(participant.permissions.size).toBe(1)
+    })
+
+    it('should handle case insensitive capability mapping', () => {
+      const participant = SecureParticipant.create(participantId, ['COORDINATION', 'Admin'])
+      
+      // Should map correctly regardless of case
+      expect(participant.permissions.has(Permission.SEND_MESSAGE)).toBe(true)
+      expect(participant.permissions.has(Permission.MANAGE_PARTICIPANTS)).toBe(true)
+    })
+  })
+
+  describe('edge cases and error conditions', () => {
+    it('should handle very high failed attempt counts', () => {
+      const participant = SecureParticipant.create(participantId, basicCapabilities)
+      
+      for (let i = 0; i < 100; i++) {
+        participant.recordFailedAttempt()
+      }
+      
+      expect(participant.failedAttempts).toBe(100)
+      expect(participant.isLocked).toBe(true)
+    })
+
+    it('should handle rapid state changes', () => {
+      const participant = SecureParticipant.create(participantId, basicCapabilities)
+      
+      participant.deactivate()
+      participant.activate()
+      participant.deactivate()
+      participant.activate()
+      
+      expect(participant.isActive).toBe(true)
+      expect(participant.failedAttempts).toBe(0)
+      expect(participant.isLocked).toBe(false)
+    })
+
+    it('should maintain immutability of capabilities and permissions', () => {
+      const participant = SecureParticipant.create(participantId, basicCapabilities)
+      
+      // Should not be able to modify returned sets
+      expect(() => {
+        (participant.capabilities as any).add('new_capability')
+      }).toThrow()
+      
+      expect(() => {
+        (participant.permissions as any).add(Permission.SYSTEM_ADMIN)
+      }).toThrow()
+    })
+  })
+})

@@ -1,0 +1,366 @@
+/**
+ * @fileoverview Tests for SecurityLevel enum and utilities
+ */
+
+import { describe, it, expect } from 'vitest'
+import { SecurityLevel, SecurityLevelUtils } from '../../../security/domain/values/SecurityLevel.js'
+
+describe('SecurityLevel', () => {
+  describe('enum values', () => {
+    it('should have all expected security level values', () => {
+      expect(SecurityLevel.BASIC).toBe('basic')
+      expect(SecurityLevel.STANDARD).toBe('standard')
+      expect(SecurityLevel.ELEVATED).toBe('elevated')
+      expect(SecurityLevel.RESTRICTED).toBe('restricted')
+    })
+  })
+
+  describe('SecurityLevelUtils.hasSecurityClearance', () => {
+    it('should allow same level access', () => {
+      expect(SecurityLevelUtils.hasSecurityClearance(
+        SecurityLevel.STANDARD, 
+        SecurityLevel.STANDARD
+      )).toBe(true)
+      
+      expect(SecurityLevelUtils.hasSecurityClearance(
+        SecurityLevel.ELEVATED, 
+        SecurityLevel.ELEVATED
+      )).toBe(true)
+    })
+
+    it('should allow higher level access to lower requirements', () => {
+      expect(SecurityLevelUtils.hasSecurityClearance(
+        SecurityLevel.ELEVATED, 
+        SecurityLevel.STANDARD
+      )).toBe(true)
+      
+      expect(SecurityLevelUtils.hasSecurityClearance(
+        SecurityLevel.STANDARD, 
+        SecurityLevel.BASIC
+      )).toBe(true)
+      
+      expect(SecurityLevelUtils.hasSecurityClearance(
+        SecurityLevel.ELEVATED, 
+        SecurityLevel.BASIC
+      )).toBe(true)
+    })
+
+    it('should deny lower level access to higher requirements', () => {
+      expect(SecurityLevelUtils.hasSecurityClearance(
+        SecurityLevel.BASIC, 
+        SecurityLevel.STANDARD
+      )).toBe(false)
+      
+      expect(SecurityLevelUtils.hasSecurityClearance(
+        SecurityLevel.STANDARD, 
+        SecurityLevel.ELEVATED
+      )).toBe(false)
+      
+      expect(SecurityLevelUtils.hasSecurityClearance(
+        SecurityLevel.BASIC, 
+        SecurityLevel.ELEVATED
+      )).toBe(false)
+    })
+
+    it('should handle RESTRICTED level correctly', () => {
+      // RESTRICTED has lowest clearance (0)
+      expect(SecurityLevelUtils.hasSecurityClearance(
+        SecurityLevel.RESTRICTED, 
+        SecurityLevel.BASIC
+      )).toBe(false)
+      
+      expect(SecurityLevelUtils.hasSecurityClearance(
+        SecurityLevel.RESTRICTED, 
+        SecurityLevel.STANDARD
+      )).toBe(false)
+      
+      expect(SecurityLevelUtils.hasSecurityClearance(
+        SecurityLevel.RESTRICTED, 
+        SecurityLevel.ELEVATED
+      )).toBe(false)
+      
+      // Only same level allowed
+      expect(SecurityLevelUtils.hasSecurityClearance(
+        SecurityLevel.RESTRICTED, 
+        SecurityLevel.RESTRICTED
+      )).toBe(true)
+      
+      // Higher levels can access restricted requirements
+      expect(SecurityLevelUtils.hasSecurityClearance(
+        SecurityLevel.BASIC, 
+        SecurityLevel.RESTRICTED
+      )).toBe(true)
+    })
+
+    it('should maintain proper hierarchy order', () => {
+      const levels = [
+        SecurityLevel.RESTRICTED,  // 0
+        SecurityLevel.BASIC,       // 1
+        SecurityLevel.STANDARD,    // 2
+        SecurityLevel.ELEVATED     // 3
+      ]
+
+      // Test each level against higher levels
+      for (let i = 0; i < levels.length; i++) {
+        for (let j = i + 1; j < levels.length; j++) {
+          // Higher level should have clearance for lower level
+          expect(SecurityLevelUtils.hasSecurityClearance(levels[j], levels[i]))
+            .toBe(true)
+          
+          // Lower level should NOT have clearance for higher level
+          expect(SecurityLevelUtils.hasSecurityClearance(levels[i], levels[j]))
+            .toBe(false)
+        }
+      }
+    })
+  })
+
+  describe('SecurityLevelUtils.getLimits', () => {
+    it('should return correct limits for BASIC level', () => {
+      const limits = SecurityLevelUtils.getLimits(SecurityLevel.BASIC)
+      
+      expect(limits.maxMessagesPerMinute).toBe(5)
+      expect(limits.maxMessageLength).toBe(1000)
+      expect(limits.allowedOperations).toEqual([
+        'send_message', 
+        'read_own_messages'
+      ])
+    })
+
+    it('should return correct limits for STANDARD level', () => {
+      const limits = SecurityLevelUtils.getLimits(SecurityLevel.STANDARD)
+      
+      expect(limits.maxMessagesPerMinute).toBe(20)
+      expect(limits.maxMessageLength).toBe(5000)
+      expect(limits.allowedOperations).toEqual([
+        'send_message', 
+        'read_message', 
+        'respond_message', 
+        'search_messages'
+      ])
+    })
+
+    it('should return correct limits for ELEVATED level', () => {
+      const limits = SecurityLevelUtils.getLimits(SecurityLevel.ELEVATED)
+      
+      expect(limits.maxMessagesPerMinute).toBe(50)
+      expect(limits.maxMessageLength).toBe(10000)
+      expect(limits.allowedOperations).toEqual(['*'])
+    })
+
+    it('should return correct limits for RESTRICTED level', () => {
+      const limits = SecurityLevelUtils.getLimits(SecurityLevel.RESTRICTED)
+      
+      expect(limits.maxMessagesPerMinute).toBe(0)
+      expect(limits.maxMessageLength).toBe(0)
+      expect(limits.allowedOperations).toEqual([])
+    })
+
+    it('should return different limits for each level', () => {
+      const basicLimits = SecurityLevelUtils.getLimits(SecurityLevel.BASIC)
+      const standardLimits = SecurityLevelUtils.getLimits(SecurityLevel.STANDARD)
+      const elevatedLimits = SecurityLevelUtils.getLimits(SecurityLevel.ELEVATED)
+      const restrictedLimits = SecurityLevelUtils.getLimits(SecurityLevel.RESTRICTED)
+
+      // Message per minute limits should increase with level
+      expect(restrictedLimits.maxMessagesPerMinute).toBeLessThan(basicLimits.maxMessagesPerMinute)
+      expect(basicLimits.maxMessagesPerMinute).toBeLessThan(standardLimits.maxMessagesPerMinute)
+      expect(standardLimits.maxMessagesPerMinute).toBeLessThan(elevatedLimits.maxMessagesPerMinute)
+
+      // Message length limits should increase with level
+      expect(restrictedLimits.maxMessageLength).toBeLessThan(basicLimits.maxMessageLength)
+      expect(basicLimits.maxMessageLength).toBeLessThan(standardLimits.maxMessageLength)
+      expect(standardLimits.maxMessageLength).toBeLessThan(elevatedLimits.maxMessageLength)
+    })
+  })
+
+  describe('SecurityLevelUtils.isOperationAllowed', () => {
+    it('should allow basic operations for BASIC level', () => {
+      expect(SecurityLevelUtils.isOperationAllowed(
+        SecurityLevel.BASIC, 
+        'send_message'
+      )).toBe(true)
+      
+      expect(SecurityLevelUtils.isOperationAllowed(
+        SecurityLevel.BASIC, 
+        'read_own_messages'
+      )).toBe(true)
+    })
+
+    it('should deny advanced operations for BASIC level', () => {
+      expect(SecurityLevelUtils.isOperationAllowed(
+        SecurityLevel.BASIC, 
+        'read_message'
+      )).toBe(false)
+      
+      expect(SecurityLevelUtils.isOperationAllowed(
+        SecurityLevel.BASIC, 
+        'manage_participants'
+      )).toBe(false)
+    })
+
+    it('should allow more operations for STANDARD level', () => {
+      expect(SecurityLevelUtils.isOperationAllowed(
+        SecurityLevel.STANDARD, 
+        'send_message'
+      )).toBe(true)
+      
+      expect(SecurityLevelUtils.isOperationAllowed(
+        SecurityLevel.STANDARD, 
+        'read_message'
+      )).toBe(true)
+      
+      expect(SecurityLevelUtils.isOperationAllowed(
+        SecurityLevel.STANDARD, 
+        'respond_message'
+      )).toBe(true)
+      
+      expect(SecurityLevelUtils.isOperationAllowed(
+        SecurityLevel.STANDARD, 
+        'search_messages'
+      )).toBe(true)
+    })
+
+    it('should deny admin operations for STANDARD level', () => {
+      expect(SecurityLevelUtils.isOperationAllowed(
+        SecurityLevel.STANDARD, 
+        'manage_participants'
+      )).toBe(false)
+      
+      expect(SecurityLevelUtils.isOperationAllowed(
+        SecurityLevel.STANDARD, 
+        'system_admin'
+      )).toBe(false)
+    })
+
+    it('should allow all operations for ELEVATED level', () => {
+      const operations = [
+        'send_message',
+        'read_message',
+        'respond_message',
+        'search_messages',
+        'manage_participants',
+        'compact_threads',
+        'view_audit_logs',
+        'any_custom_operation'
+      ]
+
+      operations.forEach(operation => {
+        expect(SecurityLevelUtils.isOperationAllowed(
+          SecurityLevel.ELEVATED, 
+          operation
+        )).toBe(true)
+      })
+    })
+
+    it('should deny all operations for RESTRICTED level', () => {
+      const operations = [
+        'send_message',
+        'read_message',
+        'read_own_messages',
+        'respond_message',
+        'search_messages',
+        'manage_participants',
+        'system_admin'
+      ]
+
+      operations.forEach(operation => {
+        expect(SecurityLevelUtils.isOperationAllowed(
+          SecurityLevel.RESTRICTED, 
+          operation
+        )).toBe(false)
+      })
+    })
+
+    it('should handle wildcard operations correctly', () => {
+      // Only ELEVATED should allow wildcard
+      expect(SecurityLevelUtils.isOperationAllowed(
+        SecurityLevel.ELEVATED, 
+        'any_operation'
+      )).toBe(true)
+      
+      expect(SecurityLevelUtils.isOperationAllowed(
+        SecurityLevel.STANDARD, 
+        'any_operation'
+      )).toBe(false)
+      
+      expect(SecurityLevelUtils.isOperationAllowed(
+        SecurityLevel.BASIC, 
+        'any_operation'
+      )).toBe(false)
+      
+      expect(SecurityLevelUtils.isOperationAllowed(
+        SecurityLevel.RESTRICTED, 
+        'any_operation'
+      )).toBe(false)
+    })
+  })
+
+  describe('security level progression', () => {
+    it('should maintain proper capability progression', () => {
+      // Each higher level should allow at least as many operations
+      const testOperations = [
+        'send_message',
+        'read_message', 
+        'respond_message',
+        'search_messages'
+      ]
+
+      testOperations.forEach(operation => {
+        const basicAllowed = SecurityLevelUtils.isOperationAllowed(SecurityLevel.BASIC, operation)
+        const standardAllowed = SecurityLevelUtils.isOperationAllowed(SecurityLevel.STANDARD, operation)
+        const elevatedAllowed = SecurityLevelUtils.isOperationAllowed(SecurityLevel.ELEVATED, operation)
+
+        // If basic allows it, standard should too
+        if (basicAllowed) {
+          expect(standardAllowed).toBe(true)
+          expect(elevatedAllowed).toBe(true)
+        }
+
+        // If standard allows it, elevated should too
+        if (standardAllowed) {
+          expect(elevatedAllowed).toBe(true)
+        }
+      })
+    })
+
+    it('should have increasing resource limits', () => {
+      const restrictedLimits = SecurityLevelUtils.getLimits(SecurityLevel.RESTRICTED)
+      const basicLimits = SecurityLevelUtils.getLimits(SecurityLevel.BASIC)
+      const standardLimits = SecurityLevelUtils.getLimits(SecurityLevel.STANDARD)
+      const elevatedLimits = SecurityLevelUtils.getLimits(SecurityLevel.ELEVATED)
+
+      // Messages per minute should increase
+      expect(restrictedLimits.maxMessagesPerMinute).toBeLessThanOrEqual(basicLimits.maxMessagesPerMinute)
+      expect(basicLimits.maxMessagesPerMinute).toBeLessThanOrEqual(standardLimits.maxMessagesPerMinute)
+      expect(standardLimits.maxMessagesPerMinute).toBeLessThanOrEqual(elevatedLimits.maxMessagesPerMinute)
+
+      // Message length should increase
+      expect(restrictedLimits.maxMessageLength).toBeLessThanOrEqual(basicLimits.maxMessageLength)
+      expect(basicLimits.maxMessageLength).toBeLessThanOrEqual(standardLimits.maxMessageLength)
+      expect(standardLimits.maxMessageLength).toBeLessThanOrEqual(elevatedLimits.maxMessageLength)
+    })
+  })
+
+  describe('edge cases', () => {
+    it('should handle empty operation strings', () => {
+      expect(SecurityLevelUtils.isOperationAllowed(SecurityLevel.STANDARD, '')).toBe(false)
+      expect(SecurityLevelUtils.isOperationAllowed(SecurityLevel.ELEVATED, '')).toBe(true) // wildcard allows all
+    })
+
+    it('should handle case sensitivity in operations', () => {
+      expect(SecurityLevelUtils.isOperationAllowed(SecurityLevel.BASIC, 'SEND_MESSAGE')).toBe(false)
+      expect(SecurityLevelUtils.isOperationAllowed(SecurityLevel.BASIC, 'Send_Message')).toBe(false)
+      expect(SecurityLevelUtils.isOperationAllowed(SecurityLevel.BASIC, 'send_message')).toBe(true)
+    })
+
+    it('should maintain consistent limits across calls', () => {
+      const limits1 = SecurityLevelUtils.getLimits(SecurityLevel.STANDARD)
+      const limits2 = SecurityLevelUtils.getLimits(SecurityLevel.STANDARD)
+      
+      expect(limits1.maxMessagesPerMinute).toBe(limits2.maxMessagesPerMinute)
+      expect(limits1.maxMessageLength).toBe(limits2.maxMessageLength)
+      expect(limits1.allowedOperations).toEqual(limits2.allowedOperations)
+    })
+  })
+})

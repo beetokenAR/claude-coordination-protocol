@@ -1,0 +1,45 @@
+# Source files
+src/
+
+# Test files
+tests/
+coverage/
+.coverage/
+*.test.ts
+*.spec.ts
+
+# Development files
+.vscode/
+.idea/
+*.log
+.DS_Store
+
+# Build files
+tsconfig.json
+.eslintrc.json
+.prettierrc
+vitest.config.ts
+
+# Documentation source
+docs/
+
+# Examples (keep for npm)
+# examples/
+
+# Git files
+.git/
+.gitignore
+
+# Local data
+.coordination/
+*.db
+*.db-wal
+*.db-shm
+
+# Environment files
+.env
+.env.*
+
+# Lock files (keep package-lock.json)
+yarn.lock
+pnpm-lock.yaml

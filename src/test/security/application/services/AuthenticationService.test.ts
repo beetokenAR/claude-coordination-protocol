@@ -1,0 +1,414 @@
+/**
+ * @fileoverview Tests for AuthenticationService
+ */
+
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { AuthenticationService } from '../../../security/application/services/AuthenticationService.js'
+import { ParticipantId } from '../../../security/domain/values/ParticipantId.js'
+import { SecureParticipant } from '../../../security/domain/entities/SecureParticipant.js'
+import { SecurityLevel } from '../../../security/domain/values/SecurityLevel.js'
+import { IParticipantRepository } from '../../../security/application/interfaces/IParticipantRepository.js'
+import { IAuditService } from '../../../security/application/interfaces/IAuditService.js'
+
+describe('AuthenticationService', () => {
+  let authService: AuthenticationService
+  let mockParticipantRepository: IParticipantRepository
+  let mockAuditService: IAuditService
+  let testParticipantId: ParticipantId
+  let testParticipant: SecureParticipant
+
+  beforeEach(() => {
+    testParticipantId = ParticipantId.create('@test_user')
+    testParticipant = SecureParticipant.create(
+      testParticipantId,
+      ['coordination'],
+      SecurityLevel.STANDARD
+    )
+
+    // Mock repository
+    mockParticipantRepository = {
+      findById: vi.fn(),
+      save: vi.fn(),
+      deleteById: vi.fn(),
+      findActive: vi.fn(),
+      findBySecurityLevel: vi.fn(),
+      findLocked: vi.fn(),
+      countByStatus: vi.fn()
+    }
+
+    // Mock audit service
+    mockAuditService = {
+      logAuthenticationSuccess: vi.fn(),
+      logAuthenticationFailure: vi.fn(),
+      logSecurityEvent: vi.fn(),
+      logAdminAction: vi.fn(),
+      logSystemError: vi.fn(),
+      getEventsForParticipant: vi.fn(),
+      getEventsByType: vi.fn(),
+      getSecurityStats: vi.fn()
+    }
+
+    authService = new AuthenticationService(mockParticipantRepository, mockAuditService)
+  })
+
+  describe('authenticate', () => {
+    it('should authenticate valid active participant', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(testParticipant)
+      vi.mocked(mockParticipantRepository.save).mockResolvedValue()
+      vi.mocked(mockAuditService.logAuthenticationSuccess).mockResolvedValue()
+
+      const result = await authService.authenticate('@test_user')
+
+      expect(result).toBe(testParticipant)
+      expect(mockParticipantRepository.findById).toHaveBeenCalledWith(testParticipantId)
+      expect(mockParticipantRepository.save).toHaveBeenCalledWith(testParticipant)
+      expect(mockAuditService.logAuthenticationSuccess).toHaveBeenCalledWith('@test_user')
+    })
+
+    it('should reject authentication for non-existent participant', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(null)
+      vi.mocked(mockAuditService.logAuthenticationFailure).mockResolvedValue()
+
+      const result = await authService.authenticate('@nonexistent')
+
+      expect(result).toBeNull()
+      expect(mockAuditService.logAuthenticationFailure).toHaveBeenCalledWith(
+        '@nonexistent',
+        'PARTICIPANT_NOT_FOUND'
+      )
+    })
+
+    it('should reject authentication for inactive participant', async () => {
+      testParticipant.deactivate()
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(testParticipant)
+      vi.mocked(mockAuditService.logAuthenticationFailure).mockResolvedValue()
+
+      const result = await authService.authenticate('@test_user')
+
+      expect(result).toBeNull()
+      expect(mockAuditService.logAuthenticationFailure).toHaveBeenCalledWith(
+        '@test_user',
+        'PARTICIPANT_INACTIVE'
+      )
+    })
+
+    it('should reject authentication for locked participant', async () => {
+      // Lock the participant
+      for (let i = 0; i < 5; i++) {
+        testParticipant.recordFailedAttempt()
+      }
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(testParticipant)
+      vi.mocked(mockAuditService.logAuthenticationFailure).mockResolvedValue()
+
+      const result = await authService.authenticate('@test_user')
+
+      expect(result).toBeNull()
+      expect(mockAuditService.logAuthenticationFailure).toHaveBeenCalledWith(
+        '@test_user',
+        'PARTICIPANT_LOCKED'
+      )
+    })
+
+    it('should handle invalid participant ID format', async () => {
+      vi.mocked(mockAuditService.logAuthenticationFailure).mockResolvedValue()
+
+      const result = await authService.authenticate('invalid_id')
+
+      expect(result).toBeNull()
+      expect(mockAuditService.logAuthenticationFailure).toHaveBeenCalledWith(
+        'invalid_id',
+        'INVALID_PARTICIPANT_ID',
+        expect.any(String)
+      )
+    })
+
+    it('should update last seen timestamp on successful authentication', async () => {
+      const originalLastSeen = testParticipant.lastSeen
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(testParticipant)
+      vi.mocked(mockParticipantRepository.save).mockResolvedValue()
+      vi.mocked(mockAuditService.logAuthenticationSuccess).mockResolvedValue()
+
+      await authService.authenticate('@test_user')
+
+      expect(testParticipant.lastSeen.getTime()).toBeGreaterThanOrEqual(originalLastSeen.getTime())
+      expect(mockParticipantRepository.save).toHaveBeenCalledWith(testParticipant)
+    })
+
+    it('should handle repository errors gracefully', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockRejectedValue(new Error('Database error'))
+      vi.mocked(mockAuditService.logSystemError).mockResolvedValue()
+
+      const result = await authService.authenticate('@test_user')
+
+      expect(result).toBeNull()
+      // Should not propagate the error
+    })
+  })
+
+  describe('recordFailedAttempt', () => {
+    it('should record failed attempt for existing participant', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(testParticipant)
+      vi.mocked(mockParticipantRepository.save).mockResolvedValue()
+      vi.mocked(mockAuditService.logSecurityEvent).mockResolvedValue()
+
+      const initialFailedAttempts = testParticipant.failedAttempts
+
+      await authService.recordFailedAttempt('@test_user')
+
+      expect(testParticipant.failedAttempts).toBe(initialFailedAttempts + 1)
+      expect(mockParticipantRepository.save).toHaveBeenCalledWith(testParticipant)
+      expect(mockAuditService.logSecurityEvent).toHaveBeenCalledWith(
+        '@test_user',
+        'FAILED_ATTEMPT_RECORDED',
+        {
+          failedAttempts: testParticipant.failedAttempts,
+          isLocked: testParticipant.isLocked
+        }
+      )
+    })
+
+    it('should handle non-existent participant gracefully', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(null)
+      vi.mocked(mockAuditService.logSystemError).mockResolvedValue()
+
+      // Should not throw
+      await expect(authService.recordFailedAttempt('@nonexistent')).resolves.toBeUndefined()
+    })
+
+    it('should log when participant gets locked', async () => {
+      // Set participant to 4 failed attempts
+      for (let i = 0; i < 4; i++) {
+        testParticipant.recordFailedAttempt()
+      }
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(testParticipant)
+      vi.mocked(mockParticipantRepository.save).mockResolvedValue()
+      vi.mocked(mockAuditService.logSecurityEvent).mockResolvedValue()
+
+      await authService.recordFailedAttempt('@test_user')
+
+      expect(testParticipant.isLocked).toBe(true)
+      expect(mockAuditService.logSecurityEvent).toHaveBeenCalledWith(
+        '@test_user',
+        'FAILED_ATTEMPT_RECORDED',
+        {
+          failedAttempts: 5,
+          isLocked: true
+        }
+      )
+    })
+
+    it('should handle invalid participant ID format', async () => {
+      vi.mocked(mockAuditService.logSystemError).mockResolvedValue()
+
+      await authService.recordFailedAttempt('invalid_id')
+
+      expect(mockAuditService.logSystemError).toHaveBeenCalledWith(
+        'FAILED_ATTEMPT_RECORDING_ERROR',
+        expect.any(String)
+      )
+    })
+
+    it('should handle repository errors gracefully', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockRejectedValue(new Error('Database error'))
+      vi.mocked(mockAuditService.logSystemError).mockResolvedValue()
+
+      await expect(authService.recordFailedAttempt('@test_user')).resolves.toBeUndefined()
+      expect(mockAuditService.logSystemError).toHaveBeenCalled()
+    })
+  })
+
+  describe('unlockParticipant', () => {
+    beforeEach(() => {
+      // Lock the test participant
+      for (let i = 0; i < 5; i++) {
+        testParticipant.recordFailedAttempt()
+      }
+    })
+
+    it('should unlock existing locked participant', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(testParticipant)
+      vi.mocked(mockParticipantRepository.save).mockResolvedValue()
+      vi.mocked(mockAuditService.logAdminAction).mockResolvedValue()
+
+      expect(testParticipant.isLocked).toBe(true)
+
+      const result = await authService.unlockParticipant('@test_user', '@admin')
+
+      expect(result).toBe(true)
+      expect(testParticipant.isActive).toBe(true)
+      expect(testParticipant.isLocked).toBe(false)
+      expect(testParticipant.failedAttempts).toBe(0)
+      expect(mockParticipantRepository.save).toHaveBeenCalledWith(testParticipant)
+      expect(mockAuditService.logAdminAction).toHaveBeenCalledWith(
+        '@admin',
+        'PARTICIPANT_UNLOCKED',
+        { targetParticipant: '@test_user' }
+      )
+    })
+
+    it('should return false for non-existent participant', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(null)
+
+      const result = await authService.unlockParticipant('@nonexistent', '@admin')
+
+      expect(result).toBe(false)
+      expect(mockParticipantRepository.save).not.toHaveBeenCalled()
+    })
+
+    it('should handle invalid participant ID format', async () => {
+      vi.mocked(mockAuditService.logSystemError).mockResolvedValue()
+
+      const result = await authService.unlockParticipant('invalid_id', '@admin')
+
+      expect(result).toBe(false)
+      expect(mockAuditService.logSystemError).toHaveBeenCalledWith(
+        'UNLOCK_PARTICIPANT_ERROR',
+        expect.any(String)
+      )
+    })
+
+    it('should handle repository errors gracefully', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockRejectedValue(new Error('Database error'))
+      vi.mocked(mockAuditService.logSystemError).mockResolvedValue()
+
+      const result = await authService.unlockParticipant('@test_user', '@admin')
+
+      expect(result).toBe(false)
+      expect(mockAuditService.logSystemError).toHaveBeenCalled()
+    })
+  })
+
+  describe('deactivateParticipant', () => {
+    it('should deactivate existing active participant', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(testParticipant)
+      vi.mocked(mockParticipantRepository.save).mockResolvedValue()
+      vi.mocked(mockAuditService.logAdminAction).mockResolvedValue()
+
+      expect(testParticipant.isActive).toBe(true)
+
+      const result = await authService.deactivateParticipant('@test_user', '@admin', 'Violation of policy')
+
+      expect(result).toBe(true)
+      expect(testParticipant.isActive).toBe(false)
+      expect(mockParticipantRepository.save).toHaveBeenCalledWith(testParticipant)
+      expect(mockAuditService.logAdminAction).toHaveBeenCalledWith(
+        '@admin',
+        'PARTICIPANT_DEACTIVATED',
+        { 
+          targetParticipant: '@test_user',
+          reason: 'Violation of policy'
+        }
+      )
+    })
+
+    it('should return false for non-existent participant', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(null)
+
+      const result = await authService.deactivateParticipant('@nonexistent', '@admin', 'Test')
+
+      expect(result).toBe(false)
+      expect(mockParticipantRepository.save).not.toHaveBeenCalled()
+    })
+
+    it('should handle invalid participant ID format', async () => {
+      vi.mocked(mockAuditService.logSystemError).mockResolvedValue()
+
+      const result = await authService.deactivateParticipant('invalid_id', '@admin', 'Test')
+
+      expect(result).toBe(false)
+      expect(mockAuditService.logSystemError).toHaveBeenCalledWith(
+        'DEACTIVATE_PARTICIPANT_ERROR',
+        expect.any(String)
+      )
+    })
+
+    it('should handle repository errors gracefully', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockRejectedValue(new Error('Database error'))
+      vi.mocked(mockAuditService.logSystemError).mockResolvedValue()
+
+      const result = await authService.deactivateParticipant('@test_user', '@admin', 'Test')
+
+      expect(result).toBe(false)
+      expect(mockAuditService.logSystemError).toHaveBeenCalled()
+    })
+
+    it('should deactivate already inactive participant', async () => {
+      testParticipant.deactivate()
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(testParticipant)
+      vi.mocked(mockParticipantRepository.save).mockResolvedValue()
+      vi.mocked(mockAuditService.logAdminAction).mockResolvedValue()
+
+      const result = await authService.deactivateParticipant('@test_user', '@admin', 'Already inactive')
+
+      expect(result).toBe(true)
+      expect(testParticipant.isActive).toBe(false)
+      expect(mockAuditService.logAdminAction).toHaveBeenCalled()
+    })
+  })
+
+  describe('audit integration', () => {
+    it('should log all authentication events properly', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(testParticipant)
+      vi.mocked(mockParticipantRepository.save).mockResolvedValue()
+      vi.mocked(mockAuditService.logAuthenticationSuccess).mockResolvedValue()
+
+      await authService.authenticate('@test_user')
+
+      expect(mockAuditService.logAuthenticationSuccess).toHaveBeenCalledTimes(1)
+      expect(mockAuditService.logAuthenticationSuccess).toHaveBeenCalledWith('@test_user')
+    })
+
+    it('should handle audit service failures gracefully', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(testParticipant)
+      vi.mocked(mockParticipantRepository.save).mockResolvedValue()
+      vi.mocked(mockAuditService.logAuthenticationSuccess).mockRejectedValue(new Error('Audit error'))
+
+      // Should not throw despite audit failure
+      const result = await authService.authenticate('@test_user')
+      expect(result).toBe(testParticipant)
+    })
+  })
+
+  describe('edge cases', () => {
+    it('should handle concurrent authentication attempts', async () => {
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(testParticipant)
+      vi.mocked(mockParticipantRepository.save).mockResolvedValue()
+      vi.mocked(mockAuditService.logAuthenticationSuccess).mockResolvedValue()
+
+      // Simulate concurrent calls
+      const promises = Array(5).fill(null).map(() => 
+        authService.authenticate('@test_user')
+      )
+
+      const results = await Promise.all(promises)
+      results.forEach(result => {
+        expect(result).toBe(testParticipant)
+      })
+
+      expect(mockParticipantRepository.findById).toHaveBeenCalledTimes(5)
+      expect(mockParticipantRepository.save).toHaveBeenCalledTimes(5)
+    })
+
+    it('should handle special characters in participant IDs', async () => {
+      const specialId = ParticipantId.create('@user_with-hyphens_123')
+      const specialParticipant = SecureParticipant.create(specialId, ['coordination'])
+      
+      vi.mocked(mockParticipantRepository.findById).mockResolvedValue(specialParticipant)
+      vi.mocked(mockParticipantRepository.save).mockResolvedValue()
+      vi.mocked(mockAuditService.logAuthenticationSuccess).mockResolvedValue()
+
+      const result = await authService.authenticate('@user_with-hyphens_123')
+
+      expect(result).toBe(specialParticipant)
+    })
+
+    it('should handle null and undefined inputs gracefully', async () => {
+      vi.mocked(mockAuditService.logAuthenticationFailure).mockResolvedValue()
+
+      // Should handle null/undefined without throwing
+      await expect(authService.authenticate(null as any)).resolves.toBeNull()
+      await expect(authService.authenticate(undefined as any)).resolves.toBeNull()
+      await expect(authService.authenticate('')).resolves.toBeNull()
+    })
+  })
+})

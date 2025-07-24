@@ -1,0 +1,37 @@
+# Claude Coordination Protocol Configuration
+# This file configures the coordination system for your project
+
+# Participant identity - must start with @
+participant_id: "@claude"
+
+# Directory for coordination data (relative to project root)
+data_directory: ".coordination"
+
+# Automatically archive resolved messages after N days
+archive_days: 30
+
+# Token usage limit for optimization decisions
+token_limit: 1000000
+
+# Enable automatic compaction of old threads
+auto_compact: true
+
+# Registered participants in this project
+participants:
+  - id: "@backend"
+    capabilities: ["api", "database", "infrastructure"]
+    default_priority: "M"
+    
+  - id: "@mobile"
+    capabilities: ["ui", "user_experience", "client"]
+    default_priority: "M"
+    
+  - id: "@security"
+    capabilities: ["auth", "compliance", "audit"]
+    default_priority: "H"
+
+# Notification settings
+notification_settings:
+  enabled: true
+  priority_threshold: "M"  # Only notify for Medium priority and above
+  batch_notifications: true  # Group notifications together

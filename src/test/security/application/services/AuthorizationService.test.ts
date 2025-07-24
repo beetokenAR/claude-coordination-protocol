@@ -1,0 +1,590 @@
+/**
+ * @fileoverview Tests for AuthorizationService
+ */
+
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { 
+  AuthorizationService, 
+  AuthorizationRequest 
+} from '../../../security/application/services/AuthorizationService.js'
+import { ParticipantId } from '../../../security/domain/values/ParticipantId.js'
+import { SecureParticipant } from '../../../security/domain/entities/SecureParticipant.js'
+import { SecurityLevel } from '../../../security/domain/values/SecurityLevel.js'
+import { Permission } from '../../../security/domain/values/Permission.js'
+import { IAuditService } from '../../../security/application/interfaces/IAuditService.js'
+
+describe('AuthorizationService', () => {
+  let authzService: AuthorizationService
+  let mockAuditService: IAuditService
+  let testParticipant: SecureParticipant
+  let adminParticipant: SecureParticipant
+  let restrictedParticipant: SecureParticipant
+
+  beforeEach(() => {
+    // Mock audit service
+    mockAuditService = {
+      logAuthenticationSuccess: vi.fn(),
+      logAuthenticationFailure: vi.fn(),
+      logSecurityEvent: vi.fn(),
+      logAdminAction: vi.fn(),
+      logSystemError: vi.fn(),
+      getEventsForParticipant: vi.fn(),
+      getEventsByType: vi.fn(),
+      getSecurityStats: vi.fn()
+    }
+
+    authzService = new AuthorizationService(mockAuditService)
+
+    // Create test participants
+    testParticipant = SecureParticipant.create(
+      ParticipantId.create('@test_user'),
+      ['coordination'],
+      SecurityLevel.STANDARD
+    )
+
+    adminParticipant = SecureParticipant.create(
+      ParticipantId.create('@admin_user'),
+      ['coordination', 'admin'],
+      SecurityLevel.ELEVATED
+    )
+
+    restrictedParticipant = SecureParticipant.create(
+      ParticipantId.create('@restricted_user'),
+      [],
+      SecurityLevel.RESTRICTED
+    )
+  })
+
+  describe('authorize - basic authorization', () => {
+    it('should grant authorization for valid request', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(true)
+      expect(result.reason).toBe('Authorization granted')
+      expect(result.riskLevel).toBe('MEDIUM')
+      expect(mockAuditService.logSecurityEvent).toHaveBeenCalledWith(
+        '@test_user',
+        'AUTHORIZATION_GRANTED',
+        expect.objectContaining({
+          permission: Permission.SEND_MESSAGE,
+          riskLevel: 'MEDIUM'
+        })
+      )
+    })
+
+    it('should deny authorization for inactive participant', async () => {
+      testParticipant.deactivate()
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(false)
+      expect(result.reason).toBe('Participant is not active')
+      expect(result.riskLevel).toBe('MEDIUM')
+      expect(mockAuditService.logSecurityEvent).toHaveBeenCalledWith(
+        '@test_user',
+        'AUTHORIZATION_DENIED',
+        expect.objectContaining({
+          reason: 'PARTICIPANT_INACTIVE'
+        })
+      )
+    })
+
+    it('should deny authorization for locked participant', async () => {
+      // Lock the participant
+      for (let i = 0; i < 5; i++) {
+        testParticipant.recordFailedAttempt()
+      }
+      
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(false)
+      expect(result.reason).toBe('Participant is locked due to failed attempts')
+      expect(result.riskLevel).toBe('HIGH')
+    })
+
+    it('should deny authorization for insufficient permissions', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SYSTEM_ADMIN
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(false)
+      expect(result.reason).toBe('Insufficient permissions')
+      expect(result.riskLevel).toBe('CRITICAL')
+      expect(mockAuditService.logSecurityEvent).toHaveBeenCalledWith(
+        '@test_user',
+        'AUTHORIZATION_DENIED',
+        expect.objectContaining({
+          reason: 'INSUFFICIENT_PERMISSIONS'
+        })
+      )
+    })
+  })
+
+  describe('authorize - permission hierarchy', () => {
+    it('should grant implied permissions correctly', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.READ_OWN_MESSAGES // Implied by SEND_MESSAGE
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(true)
+    })
+
+    it('should grant admin permissions correctly', async () => {
+      const adminRequests = [
+        Permission.MANAGE_PARTICIPANTS,
+        Permission.VIEW_AUDIT_LOGS,
+        Permission.REGISTER_PARTICIPANT,
+        Permission.COMPACT_THREADS
+      ]
+
+      for (const permission of adminRequests) {
+        const request: AuthorizationRequest = {
+          participant: adminParticipant,
+          requiredPermission: permission
+        }
+
+        const result = await authzService.authorize(request)
+        expect(result.granted).toBe(true)
+      }
+    })
+
+    it('should deny permissions not in hierarchy', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.MANAGE_PARTICIPANTS
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(false)
+      expect(result.reason).toBe('Insufficient permissions')
+    })
+  })
+
+  describe('authorize - security level constraints', () => {
+    it('should allow operations for appropriate security level', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE,
+        additionalContext: {
+          messageLength: 1000,
+          recentMessageCount: 5
+        }
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(true)
+    })
+
+    it('should deny operations exceeding message length limits', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE,
+        additionalContext: {
+          messageLength: 10000 // Exceeds STANDARD limit of 5000
+        }
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(false)
+      expect(result.reason).toContain('Message length 10000 exceeds limit 5000')
+      expect(mockAuditService.logSecurityEvent).toHaveBeenCalledWith(
+        '@test_user',
+        'AUTHORIZATION_DENIED',
+        expect.objectContaining({
+          reason: 'SECURITY_LEVEL_RESTRICTION'
+        })
+      )
+    })
+
+    it('should deny operations exceeding rate limits', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE,
+        additionalContext: {
+          recentMessageCount: 25 // Exceeds STANDARD limit of 20
+        }
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(false)
+      expect(result.reason).toContain('Rate limit exceeded: 25/20 messages per minute')
+    })
+
+    it('should deny all operations for RESTRICTED level', async () => {
+      const request: AuthorizationRequest = {
+        participant: restrictedParticipant,
+        requiredPermission: Permission.READ_OWN_MESSAGES
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(false)
+      expect(result.reason).toContain('Operation read_own_messages not allowed for security level restricted')
+    })
+
+    it('should allow elevated user to exceed standard limits', async () => {
+      const request: AuthorizationRequest = {
+        participant: adminParticipant, // ELEVATED level
+        requiredPermission: Permission.SEND_MESSAGE,
+        additionalContext: {
+          messageLength: 8000, // Exceeds STANDARD but within ELEVATED limits
+          recentMessageCount: 30 // Same case
+        }
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(true)
+    })
+  })
+
+  describe('authorize - resource access control', () => {
+    it('should allow access to own messages', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.READ_OWN_MESSAGES,
+        resourceType: 'message',
+        resourceId: 'msg_123'
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(true)
+    })
+
+    it('should allow access to general messages with proper permission', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.READ_MESSAGE,
+        resourceType: 'message',
+        resourceId: 'msg_456'
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(true)
+    })
+
+    it('should allow access to own participant data', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.VIEW_PARTICIPANT_INFO,
+        resourceType: 'participant',
+        resourceId: '@test_user'
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(true)
+    })
+
+    it('should deny access to other participant data without permission', async () => {
+      const basicParticipantWithoutPermission = SecureParticipant.create(
+        ParticipantId.create('@basic_user'),
+        [], // No capabilities that grant VIEW_PARTICIPANT_INFO
+        SecurityLevel.BASIC
+      )
+
+      const request: AuthorizationRequest = {
+        participant: basicParticipantWithoutPermission,
+        requiredPermission: Permission.VIEW_PARTICIPANT_INFO,
+        resourceType: 'participant',
+        resourceId: '@other_user'
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(false)
+      expect(result.reason).toBe('Insufficient permissions')
+    })
+
+    it('should handle unknown resource types gracefully', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE,
+        resourceType: 'unknown_resource',
+        resourceId: 'resource_123'
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(true) // Should allow unknown resource types
+    })
+  })
+
+  describe('authorize - risk levels', () => {
+    it('should assign correct risk levels for different permissions', async () => {
+      const testCases = [
+        { permission: Permission.READ_OWN_MESSAGES, expectedRisk: 'LOW' },
+        { permission: Permission.SEND_MESSAGE, expectedRisk: 'MEDIUM' },
+        { permission: Permission.MANAGE_PARTICIPANTS, expectedRisk: 'HIGH' },
+        { permission: Permission.SYSTEM_ADMIN, expectedRisk: 'CRITICAL' }
+      ]
+
+      for (const testCase of testCases) {
+        const request: AuthorizationRequest = {
+          participant: adminParticipant, // Use admin to avoid permission issues
+          requiredPermission: testCase.permission
+        }
+
+        const result = await authzService.authorize(request)
+
+        if (result.granted) {
+          expect(result.riskLevel).toBe(testCase.expectedRisk)
+        }
+      }
+    })
+  })
+
+  describe('audit logging', () => {
+    it('should log granted authorizations', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE,
+        resourceId: 'resource_123'
+      }
+
+      await authzService.authorize(request)
+
+      expect(mockAuditService.logSecurityEvent).toHaveBeenCalledWith(
+        '@test_user',
+        'AUTHORIZATION_GRANTED',
+        expect.objectContaining({
+          permission: Permission.SEND_MESSAGE,
+          resourceId: 'resource_123',
+          securityLevel: SecurityLevel.STANDARD,
+          riskLevel: 'MEDIUM'
+        })
+      )
+    })
+
+    it('should log denied authorizations with reasons', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SYSTEM_ADMIN
+      }
+
+      await authzService.authorize(request)
+
+      expect(mockAuditService.logSecurityEvent).toHaveBeenCalledWith(
+        '@test_user',
+        'AUTHORIZATION_DENIED',
+        expect.objectContaining({
+          permission: Permission.SYSTEM_ADMIN,
+          reason: 'INSUFFICIENT_PERMISSIONS',
+          securityLevel: SecurityLevel.STANDARD,
+          failedAttempts: 0
+        })
+      )
+    })
+
+    it('should handle audit service failures gracefully', async () => {
+      vi.mocked(mockAuditService.logSecurityEvent).mockRejectedValue(new Error('Audit error'))
+
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE
+      }
+
+      // Should not throw despite audit failure
+      const result = await authzService.authorize(request)
+      expect(result.granted).toBe(true)
+    })
+  })
+
+  describe('edge cases and error handling', () => {
+    it('should handle participant with no permissions', async () => {
+      const noPermissionParticipant = SecureParticipant.create(
+        ParticipantId.create('@no_perms'),
+        [], // No capabilities
+        SecurityLevel.BASIC
+      )
+
+      const request: AuthorizationRequest = {
+        participant: noPermissionParticipant,
+        requiredPermission: Permission.SEND_MESSAGE
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(false)
+      expect(result.reason).toBe('Insufficient permissions')
+    })
+
+    it('should handle multiple failed attempts correctly', async () => {
+      // Record multiple failed attempts
+      for (let i = 0; i < 3; i++) {
+        testParticipant.recordFailedAttempt()
+      }
+
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(true) // Not locked yet (needs 5 attempts)
+      expect(mockAuditService.logSecurityEvent).toHaveBeenCalledWith(
+        '@test_user',
+        'AUTHORIZATION_GRANTED',
+        expect.objectContaining({
+          securityLevel: SecurityLevel.STANDARD
+        })
+      )
+    })
+
+    it('should handle concurrent authorization requests', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE
+      }
+
+      // Simulate concurrent requests
+      const promises = Array(5).fill(null).map(() => 
+        authzService.authorize(request)
+      )
+
+      const results = await Promise.all(promises)
+      results.forEach(result => {
+        expect(result.granted).toBe(true)
+      })
+
+      expect(mockAuditService.logSecurityEvent).toHaveBeenCalledTimes(5)
+    })
+
+    it('should handle extreme message lengths', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE,
+        additionalContext: {
+          messageLength: Number.MAX_SAFE_INTEGER
+        }
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(false)
+      expect(result.reason).toContain('exceeds limit')
+    })
+
+    it('should handle negative values in context', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE,
+        additionalContext: {
+          messageLength: -100,
+          recentMessageCount: -5
+        }
+      }
+
+      const result = await authzService.authorize(request)
+
+      // Should handle negative values gracefully
+      expect(result.granted).toBe(true)
+    })
+
+    it('should handle missing context gracefully', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE
+        // No additionalContext
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(true)
+    })
+
+    it('should handle malformed additional context', async () => {
+      const request: AuthorizationRequest = {
+        participant: testParticipant,
+        requiredPermission: Permission.SEND_MESSAGE,
+        additionalContext: {
+          messageLength: 'invalid' as any,
+          recentMessageCount: null as any,
+          someOtherField: { nested: 'object' }
+        }
+      }
+
+      const result = await authzService.authorize(request)
+
+      // Should handle malformed context gracefully
+      expect(result.granted).toBe(true)
+    })
+  })
+
+  describe('complex authorization scenarios', () => {
+    it('should handle admin performing user operations', async () => {
+      const request: AuthorizationRequest = {
+        participant: adminParticipant,
+        requiredPermission: Permission.SEND_MESSAGE,
+        additionalContext: {
+          messageLength: 8000, // Above standard limits but admin can do it
+          recentMessageCount: 40
+        }
+      }
+
+      const result = await authzService.authorize(request)
+
+      expect(result.granted).toBe(true)
+    })
+
+    it('should handle cross-resource authorization', async () => {
+      const requests = [
+        {
+          permission: Permission.READ_MESSAGE,
+          resourceType: 'message',
+          resourceId: 'msg_123'
+        },
+        {
+          permission: Permission.READ_MESSAGE,
+          resourceType: 'thread',
+          resourceId: 'thread_456'
+        },
+        {
+          permission: Permission.VIEW_PARTICIPANT_INFO,
+          resourceType: 'participant',
+          resourceId: '@other_user'
+        }
+      ]
+
+      for (const req of requests) {
+        const request: AuthorizationRequest = {
+          participant: testParticipant,
+          requiredPermission: req.permission as Permission,
+          resourceType: req.resourceType,
+          resourceId: req.resourceId
+        }
+
+        const result = await authzService.authorize(request)
+        expect(typeof result.granted).toBe('boolean')
+        expect(typeof result.reason).toBe('string')
+      }
+    })
+  })
+})
