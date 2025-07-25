@@ -29,7 +29,7 @@ export class DatabaseMigrator {
    */
   private getMigrations(): IMigration[] {
     const migrations: IMigration[] = []
-    
+
     // Hardcoded initial migrations (will be moved to files)
     migrations.push({
       version: 1,
@@ -140,7 +140,7 @@ export class DatabaseMigrator {
         DROP TABLE IF EXISTS messages;
         DROP TABLE IF EXISTS conversations;
         DROP TABLE IF EXISTS participants;
-      `
+      `,
     })
 
     migrations.push({
@@ -154,11 +154,12 @@ export class DatabaseMigrator {
         -- Would need to recreate table without the column
         -- This is a no-op for safety
         SELECT 1;
-      `
+      `,
     })
 
     // Load additional migrations from files
-    const files = fs.readdirSync(this.migrationsPath)
+    const files = fs
+      .readdirSync(this.migrationsPath)
       .filter(f => f.endsWith('.sql'))
       .sort()
 
@@ -168,13 +169,13 @@ export class DatabaseMigrator {
         const version = parseInt(match[1])
         const direction = match[2]
         const content = fs.readFileSync(path.join(this.migrationsPath, file), 'utf-8')
-        
+
         let migration = migrations.find(m => m.version === version)
         if (!migration) {
           migration = { version, up: '', down: '' }
           migrations.push(migration)
         }
-        
+
         if (direction === 'up') {
           migration.up = content
         } else {
@@ -193,30 +194,24 @@ export class DatabaseMigrator {
     try {
       // First check if we need special handling for version 2
       const currentVersion = this.getCurrentVersion()
-      
+
       if (currentVersion === 1) {
         // Check if suggested_approach column already exists
         const columns = this.db.pragma('table_info(messages)') as any[]
         const hasColumn = columns.some(col => col.name === 'suggested_approach')
-        
+
         if (hasColumn) {
           // Column already exists, just update the version
-          console.log('suggested_approach column already exists, updating version to 2')
           this.db.pragma('user_version = 2')
         }
       }
-      
+
       const migrations = this.getMigrations()
-      
+
       // Use better-sqlite3-migrations
       migrate(this.db, migrations)
-      
-      console.log('Database migrations completed successfully')
     } catch (error: any) {
-      throw new DatabaseError(
-        `Migration failed: ${error.message}`,
-        { error: error.message }
-      )
+      throw new DatabaseError(`Migration failed: ${error.message}`, { error: error.message })
     }
   }
 
@@ -238,13 +233,25 @@ export class DatabaseMigrator {
   createMigration(name: string): { upPath: string; downPath: string } {
     const version = this.getNextVersion()
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-    
-    const upPath = path.join(this.migrationsPath, `${version.toString().padStart(3, '0')}-up-${name}-${timestamp}.sql`)
-    const downPath = path.join(this.migrationsPath, `${version.toString().padStart(3, '0')}-down-${name}-${timestamp}.sql`)
-    
-    fs.writeFileSync(upPath, `-- Migration ${version}: ${name}\n-- Created: ${new Date().toISOString()}\n\n`)
-    fs.writeFileSync(downPath, `-- Rollback for migration ${version}: ${name}\n-- Created: ${new Date().toISOString()}\n\n`)
-    
+
+    const upPath = path.join(
+      this.migrationsPath,
+      `${version.toString().padStart(3, '0')}-up-${name}-${timestamp}.sql`
+    )
+    const downPath = path.join(
+      this.migrationsPath,
+      `${version.toString().padStart(3, '0')}-down-${name}-${timestamp}.sql`
+    )
+
+    fs.writeFileSync(
+      upPath,
+      `-- Migration ${version}: ${name}\n-- Created: ${new Date().toISOString()}\n\n`
+    )
+    fs.writeFileSync(
+      downPath,
+      `-- Rollback for migration ${version}: ${name}\n-- Created: ${new Date().toISOString()}\n\n`
+    )
+
     return { upPath, downPath }
   }
 
@@ -264,33 +271,29 @@ export class DatabaseMigrator {
     const errors: string[] = []
     const migrations = this.getMigrations()
     const migration = migrations.find(m => m.version === version)
-    
+
     if (!migration) {
       errors.push(`Migration version ${version} not found`)
       return { valid: false, errors }
     }
-    
+
     if (!migration.up) {
       errors.push(`Migration ${version} has no up script`)
     } else if (typeof migration.up === 'string') {
       if (migration.up.trim() === '') {
         errors.push(`Migration ${version} has empty up script`)
       }
-      
+
       // Check for dangerous operations in string migrations
-      const dangerousPatterns = [
-        /DROP\s+TABLE\s+(?!IF\s+EXISTS)/i,
-        /DELETE\s+FROM/i,
-        /TRUNCATE/i
-      ]
-      
+      const dangerousPatterns = [/DROP\s+TABLE\s+(?!IF\s+EXISTS)/i, /DELETE\s+FROM/i, /TRUNCATE/i]
+
       for (const pattern of dangerousPatterns) {
         if (pattern.test(migration.up)) {
           errors.push(`Migration ${version} contains potentially dangerous operation: ${pattern}`)
         }
       }
     }
-    
+
     return { valid: errors.length === 0, errors }
   }
 }

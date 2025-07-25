@@ -8,74 +8,72 @@ export class CoordinationDatabase {
   private db: Database.Database
   private dataDir: string
   private dbPath: string
-  
+
   constructor(dataDir: string) {
     this.dataDir = dataDir
     this.dbPath = path.join(dataDir, 'coordination.db')
-    
+
     // Ensure data directory exists
     this.ensureDataDirectory()
-    
+
     // Initialize database connection
     this.db = this.initializeConnection()
-    
+
     // Run migrations if needed
     migrateSchema(this.db)
   }
-  
+
   private ensureDataDirectory(): void {
     try {
       fs.mkdirSync(this.dataDir, { recursive: true, mode: 0o755 })
-      
+
       // Ensure messages directory exists
       const messagesDir = path.join(this.dataDir, 'messages')
       fs.mkdirSync(messagesDir, { recursive: true, mode: 0o755 })
       fs.mkdirSync(path.join(messagesDir, 'active'), { recursive: true, mode: 0o755 })
       fs.mkdirSync(path.join(messagesDir, 'archive'), { recursive: true, mode: 0o755 })
-      
     } catch (error: any) {
-      throw new DatabaseError(
-        `Failed to create data directory: ${error.message}`,
-        { dataDir: this.dataDir, error: error.message }
-      )
+      throw new DatabaseError(`Failed to create data directory: ${error.message}`, {
+        dataDir: this.dataDir,
+        error: error.message,
+      })
     }
   }
-  
+
   private initializeConnection(): Database.Database {
     try {
       const db = new Database(this.dbPath)
-      
+
       // Set secure file permissions (readable/writable by owner only)
       fs.chmodSync(this.dbPath, 0o600)
-      
+
       // Configure database for optimal performance and safety
       db.pragma('journal_mode = WAL')
       db.pragma('synchronous = NORMAL')
       db.pragma('cache_size = 10000')
       db.pragma('foreign_keys = ON')
       db.pragma('temp_store = memory')
-      
+
       // Set busy timeout to 10 seconds for concurrent access
       // This replaces the file locking mechanism
       db.pragma('busy_timeout = 10000')
-      
+
       return db
-      
     } catch (error: any) {
-      throw new DatabaseError(
-        `Failed to initialize database connection: ${error.message}`,
-        { dbPath: this.dbPath, error: error.message }
-      )
+      throw new DatabaseError(`Failed to initialize database connection: ${error.message}`, {
+        dbPath: this.dbPath,
+        error: error.message,
+      })
     }
   }
-  
+
   /**
    * Execute a transaction with automatic rollback on error
    */
   transaction<T>(fn: () => T): T {
     return this.db.transaction(fn)()
   }
-  
+
   /**
    * Execute a statement within a transaction
    */
@@ -86,7 +84,7 @@ export class CoordinationDatabase {
       })()
     })
   }
-  
+
   /**
    * Prepare a statement for repeated execution
    */
@@ -94,13 +92,13 @@ export class CoordinationDatabase {
     try {
       return this.db.prepare(sql)
     } catch (error: any) {
-      throw new DatabaseError(
-        `Failed to prepare SQL statement: ${error.message}`,
-        { sql, error: error.message }
-      )
+      throw new DatabaseError(`Failed to prepare SQL statement: ${error.message}`, {
+        sql,
+        error: error.message,
+      })
     }
   }
-  
+
   /**
    * Execute SQL directly (use sparingly, prefer prepared statements)
    */
@@ -108,20 +106,20 @@ export class CoordinationDatabase {
     try {
       this.db.exec(sql)
     } catch (error: any) {
-      throw new DatabaseError(
-        `Failed to execute SQL: ${error.message}`,
-        { sql, error: error.message }
-      )
+      throw new DatabaseError(`Failed to execute SQL: ${error.message}`, {
+        sql,
+        error: error.message,
+      })
     }
   }
-  
+
   /**
    * Get raw database instance (use carefully)
    */
   getRawDatabase(): Database.Database {
     return this.db
   }
-  
+
   /**
    * Close database connection
    */
@@ -129,13 +127,12 @@ export class CoordinationDatabase {
     try {
       this.db.close()
     } catch (error: any) {
-      throw new DatabaseError(
-        `Failed to close database: ${error.message}`,
-        { error: error.message }
-      )
+      throw new DatabaseError(`Failed to close database: ${error.message}`, {
+        error: error.message,
+      })
     }
   }
-  
+
   /**
    * Get database file info
    */
@@ -151,16 +148,16 @@ export class CoordinationDatabase {
         path: this.dbPath,
         size: stats.size,
         lastModified: stats.mtime,
-        permissions: (stats.mode & parseInt('777', 8)).toString(8)
+        permissions: (stats.mode & parseInt('777', 8)).toString(8),
       }
     } catch (error: any) {
-      throw new DatabaseError(
-        `Failed to get database info: ${error.message}`,
-        { dbPath: this.dbPath, error: error.message }
-      )
+      throw new DatabaseError(`Failed to get database info: ${error.message}`, {
+        dbPath: this.dbPath,
+        error: error.message,
+      })
     }
   }
-  
+
   /**
    * Run database maintenance operations
    */
@@ -168,28 +165,22 @@ export class CoordinationDatabase {
     try {
       // Optimize database
       this.db.pragma('optimize')
-      
+
       // Run integrity check
       const integrityResult = this.db.pragma('integrity_check') as any[]
       if (integrityResult[0]?.integrity_check !== 'ok') {
-        throw new DatabaseError(
-          'Database integrity check failed',
-          { integrityResult }
-        )
+        throw new DatabaseError('Database integrity check failed', { integrityResult })
       }
-      
+
       // Vacuum if WAL file is getting large
-      const walInfo = this.db.pragma('wal_checkpoint(TRUNCATE)')
-      console.log('WAL checkpoint result:', walInfo)
-      
+      this.db.pragma('wal_checkpoint(TRUNCATE)')
     } catch (error: any) {
-      throw new DatabaseError(
-        `Database maintenance failed: ${error.message}`,
-        { error: error.message }
-      )
+      throw new DatabaseError(`Database maintenance failed: ${error.message}`, {
+        error: error.message,
+      })
     }
   }
-  
+
   /**
    * Get database statistics
    */
@@ -204,9 +195,9 @@ export class CoordinationDatabase {
       const pageCount = this.db.pragma('page_count', { simple: true }) as number
       const pageSize = this.db.pragma('page_size', { simple: true }) as number
       const freePages = this.db.pragma('freelist_count', { simple: true }) as number
-      
+
       const totalSize = pageCount * pageSize
-      
+
       // Get WAL file size if it exists
       let walSize = 0
       const walPath = `${this.dbPath}-wal`
@@ -215,23 +206,21 @@ export class CoordinationDatabase {
       } catch {
         // WAL file doesn't exist or can't be read
       }
-      
+
       return {
         pageCount,
         pageSize,
         freePages,
         totalSize,
-        walSize
+        walSize,
       }
-      
     } catch (error: any) {
-      throw new DatabaseError(
-        `Failed to get database stats: ${error.message}`,
-        { error: error.message }
-      )
+      throw new DatabaseError(`Failed to get database stats: ${error.message}`, {
+        error: error.message,
+      })
     }
   }
-  
+
   /**
    * Backup database to specified path
    */
@@ -239,15 +228,14 @@ export class CoordinationDatabase {
     try {
       // Create a simple file copy backup for better-sqlite3 compatibility
       fs.copyFileSync(this.dbPath, backupPath)
-      
+
       // Set secure permissions on backup
       fs.chmodSync(backupPath, 0o600)
-      
     } catch (error: any) {
-      throw new DatabaseError(
-        `Database backup failed: ${error.message}`,
-        { backupPath, error: error.message }
-      )
+      throw new DatabaseError(`Database backup failed: ${error.message}`, {
+        backupPath,
+        error: error.message,
+      })
     }
   }
 }

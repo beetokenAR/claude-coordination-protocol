@@ -1,5 +1,5 @@
-import { DatabaseError } from '../types/index.js'
 import { DatabaseMigrator } from './migrator.js'
+import type { Database } from 'better-sqlite3'
 
 export const SCHEMA_VERSION = 2
 
@@ -78,13 +78,13 @@ export const CREATE_INDEXES = [
   'CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)',
   'CREATE INDEX IF NOT EXISTS idx_messages_expires_at ON messages(expires_at)',
   'CREATE INDEX IF NOT EXISTS idx_messages_tags ON messages(tags)', // For JSON search
-  
+
   'CREATE INDEX IF NOT EXISTS idx_conversations_status ON conversations(status)',
   'CREATE INDEX IF NOT EXISTS idx_conversations_last_activity ON conversations(last_activity)',
   'CREATE INDEX IF NOT EXISTS idx_conversations_participants ON conversations(participants)', // For JSON search
-  
+
   'CREATE INDEX IF NOT EXISTS idx_participants_status ON participants(status)',
-  'CREATE INDEX IF NOT EXISTS idx_participants_last_seen ON participants(last_seen)'
+  'CREATE INDEX IF NOT EXISTS idx_participants_last_seen ON participants(last_seen)',
 ]
 
 // Virtual tables for full-text search
@@ -96,27 +96,27 @@ export const CREATE_FTS_TABLES = [
     content='messages',
     content_rowid='rowid'
   )`,
-  
+
   // Triggers to keep FTS in sync
   `CREATE TRIGGER IF NOT EXISTS messages_fts_insert AFTER INSERT ON messages BEGIN
     INSERT INTO messages_fts(rowid, id, subject, summary) VALUES (new.rowid, new.id, new.subject, new.summary);
   END`,
-  
+
   `CREATE TRIGGER IF NOT EXISTS messages_fts_delete AFTER DELETE ON messages BEGIN
     INSERT INTO messages_fts(messages_fts, rowid, id, subject, summary) VALUES('delete', old.rowid, old.id, old.subject, old.summary);
   END`,
-  
+
   `CREATE TRIGGER IF NOT EXISTS messages_fts_update AFTER UPDATE ON messages BEGIN
     INSERT INTO messages_fts(messages_fts, rowid, id, subject, summary) VALUES('delete', old.rowid, old.id, old.subject, old.summary);
     INSERT INTO messages_fts(rowid, id, subject, summary) VALUES (new.rowid, new.id, new.subject, new.summary);
-  END`
+  END`,
 ]
 
 /**
  * Initialize database schema
  * @deprecated Use DatabaseMigrator instead
  */
-export function initializeSchema(db: any): void {
+export function initializeSchema(db: Database): void {
   // This function is kept for backward compatibility
   // New code should use DatabaseMigrator
   const migrator = new DatabaseMigrator(db)
@@ -127,7 +127,7 @@ export function initializeSchema(db: any): void {
  * Check if database needs migration
  * @deprecated Use DatabaseMigrator.getCurrentVersion() instead
  */
-export function checkSchemaVersion(db: any): number {
+export function checkSchemaVersion(db: Database): number {
   const migrator = new DatabaseMigrator(db)
   return migrator.getCurrentVersion()
 }
@@ -135,7 +135,7 @@ export function checkSchemaVersion(db: any): number {
 /**
  * Migrate database schema if needed
  */
-export function migrateSchema(db: any): void {
+export function migrateSchema(db: Database): void {
   const migrator = new DatabaseMigrator(db)
   migrator.migrate()
 }

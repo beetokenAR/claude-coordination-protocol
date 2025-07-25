@@ -5,11 +5,7 @@ import { ValidationError } from '../types/index.js'
  * Validates input data against a Zod schema
  * Throws ValidationError with detailed information on failure
  */
-export function validateInput<T>(
-  schema: z.ZodSchema<T>, 
-  data: unknown, 
-  context?: string
-): T {
+export function validateInput<T>(schema: z.ZodSchema<T>, data: unknown, context?: string): T {
   try {
     // Use parseAsync to ensure defaults are applied
     const result = schema.parse(data)
@@ -22,14 +18,14 @@ export function validateInput<T>(
           path: err.path.join('.'),
           message: err.message,
           code: err.code,
-          received: (err as any).received
-        }))
+          received: 'received' in err ? err.received : undefined,
+        })),
       }
-      
-      const message = context 
+
+      const message = context
         ? `Validation failed for ${context}: ${error.errors[0]?.message}`
         : `Validation failed: ${error.errors[0]?.message}`
-      
+
       throw new ValidationError(message, details)
     }
     throw error
@@ -39,11 +35,7 @@ export function validateInput<T>(
 /**
  * Safely parses input data, returning default value on failure
  */
-export function safeParseInput<T>(
-  schema: z.ZodSchema<T>, 
-  data: unknown, 
-  defaultValue: T
-): T {
+export function safeParseInput<T>(schema: z.ZodSchema<T>, data: unknown, defaultValue: T): T {
   const result = schema.safeParse(data)
   return result.success ? result.data : defaultValue
 }
@@ -55,11 +47,11 @@ export function validateParticipantId(id: string): void {
   if (!id.startsWith('@')) {
     throw new ValidationError(`Participant ID must start with @: ${id}`)
   }
-  
+
   if (id.length < 2) {
     throw new ValidationError(`Participant ID too short: ${id}`)
   }
-  
+
   if (!/^@[a-zA-Z][a-zA-Z0-9_-]*$/.test(id)) {
     throw new ValidationError(
       `Participant ID contains invalid characters. Must be @followed by alphanumeric, underscore, or dash: ${id}`
@@ -95,15 +87,15 @@ export function validateThreadId(id: string): void {
 export function validateFilePath(filePath: string): void {
   // Normalize path to detect directory traversal attempts
   const normalized = filePath.replace(/\\/g, '/')
-  
+
   if (normalized.includes('../') || normalized.includes('..\\')) {
     throw new ValidationError(`Path traversal not allowed: ${filePath}`)
   }
-  
+
   if (normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized)) {
     throw new ValidationError(`Absolute paths not allowed: ${filePath}`)
   }
-  
+
   // Check for null bytes and other dangerous characters
   // eslint-disable-next-line no-control-regex
   if (/[\x00-\x1f\x7f-\x9f]/.test(filePath)) {
@@ -117,11 +109,11 @@ export function validateFilePath(filePath: string): void {
 export function validateContentSize(content: string, maxTokens = 10000): void {
   // Rough token estimation: ~4 characters per token
   const estimatedTokens = Math.ceil(content.length / 4)
-  
+
   if (estimatedTokens > maxTokens) {
     throw new ValidationError(
       `Content too large: ~${estimatedTokens} tokens (max: ${maxTokens}). ` +
-      'Consider using content_ref for large content.'
+        'Consider using content_ref for large content.'
     )
   }
 }
@@ -131,9 +123,11 @@ export function validateContentSize(content: string, maxTokens = 10000): void {
  */
 export function validateDateRange(from?: Date, to?: Date): void {
   if (from && to && from > to) {
-    throw new ValidationError(`Invalid date range: from date (${from.toISOString()}) is after to date (${to.toISOString()})`)
+    throw new ValidationError(
+      `Invalid date range: from date (${from.toISOString()}) is after to date (${to.toISOString()})`
+    )
   }
-  
+
   if (from && from > new Date()) {
     throw new ValidationError(`From date cannot be in the future: ${from.toISOString()}`)
   }
@@ -142,15 +136,9 @@ export function validateDateRange(from?: Date, to?: Date): void {
 /**
  * Validates that arrays don't exceed reasonable limits
  */
-export function validateArraySize<T>(
-  array: T[], 
-  maxSize: number, 
-  name: string
-): void {
+export function validateArraySize<T>(array: T[], maxSize: number, name: string): void {
   if (array.length > maxSize) {
-    throw new ValidationError(
-      `${name} array too large: ${array.length} items (max: ${maxSize})`
-    )
+    throw new ValidationError(`${name} array too large: ${array.length} items (max: ${maxSize})`)
   }
 }
 
@@ -164,34 +152,34 @@ export function validateNoCycles(
 ): void {
   const visited = new Set<string>()
   const recursionStack = new Set<string>()
-  
+
   function hasCycle(current: string): boolean {
     if (recursionStack.has(current)) {
       return true // Cycle detected
     }
-    
+
     if (visited.has(current)) {
       return false // Already processed, no cycle in this branch
     }
-    
+
     visited.add(current)
     recursionStack.add(current)
-    
+
     const deps = current === messageId ? dependencies : getDependencies(current)
     for (const dep of deps) {
       if (hasCycle(dep)) {
         return true
       }
     }
-    
+
     recursionStack.delete(current)
     return false
   }
-  
+
   if (hasCycle(messageId)) {
-    throw new ValidationError(
-      `Circular dependency detected involving message ${messageId}`,
-      { messageId, dependencies }
-    )
+    throw new ValidationError(`Circular dependency detected involving message ${messageId}`, {
+      messageId,
+      dependencies,
+    })
   }
 }

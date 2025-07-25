@@ -7,7 +7,7 @@
 [![Test Coverage](https://img.shields.io/badge/Coverage-90%25+-green.svg)](https://github.com/beetoken/claude-coordination-protocol)
 [![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Transform chaotic multi-Claude development into orchestrated brilliance.** 
+**Transform chaotic multi-Claude development into orchestrated brilliance.**
 
 CCP enables multiple Claude instances to communicate, coordinate, and collaborate seamlessly across your entire project - whether you're building complex applications, conducting code reviews, or managing architectural decisions.
 
@@ -16,6 +16,7 @@ CCP enables multiple Claude instances to communicate, coordinate, and collaborat
 ## ✨ **Why Claude Coordination Protocol?**
 
 ### 🔥 **Before CCP**: Chaos
+
 ```
 Claude Frontend: "I updated the API interface..."
 Claude Backend: "What interface? I don't see any changes..."
@@ -24,19 +25,20 @@ Developer: *frustrated* "How do I keep everyone in sync?!"
 ```
 
 ### 🎯 **After CCP**: Perfect Harmony
+
 ```typescript
 // Frontend Claude sends:
 await ccp_send_message({
-  to: ["@backend", "@security"],
-  type: "contract",
-  priority: "H",
-  subject: "New Auth API - Breaking Changes",
-  content: "Updated /auth/login to require 2FA token...",
+  to: ['@backend', '@security'],
+  type: 'contract',
+  priority: 'H',
+  subject: 'New Auth API - Breaking Changes',
+  content: 'Updated /auth/login to require 2FA token...',
   suggested_approach: {
-    superclaude_commands: ["/sc:analyze --security", "/sc:implement"],
-    superclaude_personas: ["--persona-security", "--persona-backend"],
-    analysis_focus: ["authentication", "breaking-changes", "migration"]
-  }
+    superclaude_commands: ['/sc:analyze --security', '/sc:implement'],
+    superclaude_personas: ['--persona-security', '--persona-backend'],
+    analysis_focus: ['authentication', 'breaking-changes', 'migration'],
+  },
 })
 
 // Backend & Security Claude instantly know exactly what to do! 🚀
@@ -68,10 +70,10 @@ ccp init --participant-id="@backend"
 ```typescript
 // @architect Claude shares architectural insights
 await ccp_send_message({
-  to: ["@frontend", "@backend", "@mobile"],
-  type: "arch",
-  priority: "H",
-  subject: "New Microservices Architecture - READ ASAP",
+  to: ['@frontend', '@backend', '@mobile'],
+  type: 'arch',
+  priority: 'H',
+  subject: 'New Microservices Architecture - READ ASAP',
   content: `
 🏗️ ARCHITECTURAL DECISION: Microservices Migration
 
@@ -92,12 +94,12 @@ TIMELINE: Start next sprint, complete in 3 weeks.
   response_required: true,
   expires_in_hours: 48,
   suggested_approach: {
-    superclaude_commands: ["/sc:analyze --architecture", "/sc:design"],
-    superclaude_personas: ["--persona-architect", "--persona-backend"],
-    superclaude_flags: ["--think-hard", "--ultrathink"],
-    analysis_focus: ["microservices", "api-design", "data-consistency"],
-    tools_recommended: ["Sequential", "Context7"]
-  }
+    superclaude_commands: ['/sc:analyze --architecture', '/sc:design'],
+    superclaude_personas: ['--persona-architect', '--persona-backend'],
+    superclaude_flags: ['--think-hard', '--ultrathink'],
+    analysis_focus: ['microservices', 'api-design', 'data-consistency'],
+    tools_recommended: ['Sequential', 'Context7'],
+  },
 })
 ```
 
@@ -108,10 +110,10 @@ TIMELINE: Start next sprint, complete in 3 weeks.
 ```typescript
 // @security Claude discovers vulnerability
 await ccp_send_message({
-  to: ["@backend", "@devops", "@frontend"],
-  type: "emergency",
-  priority: "CRITICAL",
-  subject: "🚨 SQL Injection in User Login - PATCH IMMEDIATELY",
+  to: ['@backend', '@devops', '@frontend'],
+  type: 'emergency',
+  priority: 'CRITICAL',
+  subject: '🚨 SQL Injection in User Login - PATCH IMMEDIATELY',
   content: `
 🔴 CRITICAL SECURITY VULNERABILITY DETECTED
 
@@ -139,12 +141,12 @@ SELECT * FROM users WHERE username = ?
   response_required: true,
   expires_in_hours: 2,
   suggested_approach: {
-    superclaude_commands: ["/sc:analyze --security --emergency", "/sc:fix"],
-    superclaude_personas: ["--persona-security", "--persona-backend"],
-    superclaude_flags: ["--safe-mode", "--validate", "--ultrathink"],
-    analysis_focus: ["sql-injection", "parameterized-queries", "security-audit"],
-    tools_recommended: ["Sequential", "Context7"]
-  }
+    superclaude_commands: ['/sc:analyze --security --emergency', '/sc:fix'],
+    superclaude_personas: ['--persona-security', '--persona-backend'],
+    superclaude_flags: ['--safe-mode', '--validate', '--ultrathink'],
+    analysis_focus: ['sql-injection', 'parameterized-queries', 'security-audit'],
+    tools_recommended: ['Sequential', 'Context7'],
+  },
 })
 ```
 
@@ -155,10 +157,10 @@ SELECT * FROM users WHERE username = ?
 ```typescript
 // @product Claude defines new feature
 await ccp_send_message({
-  to: ["@frontend", "@backend", "@mobile"],
-  type: "contract",
-  priority: "H", 
-  subject: "New Feature: Dark Mode + User Preferences System",
+  to: ['@frontend', '@backend', '@mobile'],
+  type: 'contract',
+  priority: 'H',
+  subject: 'New Feature: Dark Mode + User Preferences System',
   content: `
 🎨 NEW FEATURE SPEC: Advanced User Preferences
 
@@ -191,12 +193,12 @@ MOBILE TASKS:
   response_required: true,
   expires_in_hours: 24,
   suggested_approach: {
-    superclaude_commands: ["/sc:implement", "/sc:design --ui"],
-    superclaude_personas: ["--persona-frontend", "--persona-backend"],
-    superclaude_flags: ["--magic", "--c7"],
-    analysis_focus: ["ui-design", "api-design", "user-experience"],
-    tools_recommended: ["Magic", "Context7", "Sequential"]
-  }
+    superclaude_commands: ['/sc:implement', '/sc:design --ui'],
+    superclaude_personas: ['--persona-frontend', '--persona-backend'],
+    superclaude_flags: ['--magic', '--c7'],
+    analysis_focus: ['ui-design', 'api-design', 'user-experience'],
+    tools_recommended: ['Magic', 'Context7', 'Sequential'],
+  },
 })
 ```
 
@@ -207,30 +209,35 @@ MOBILE TASKS:
 ## 🎛️ **Powerful Features**
 
 ### 🔍 **Intelligent Search**
+
 ```typescript
 // Find anything in seconds with semantic search
 await ccp_search_messages({
-  query: "authentication security API changes",
+  query: 'authentication security API changes',
   semantic: true,
-  tags: ["breaking-change", "security"],
-  priority: ["H", "CRITICAL"],
-  limit: 10
+  tags: ['breaking-change', 'security'],
+  priority: ['H', 'CRITICAL'],
+  limit: 10,
 })
 ```
 
-### ⚡ **Token Optimization** 
+### ⚡ **Token Optimization**
+
 CCP automatically optimizes Claude's context:
+
 - **Layered Loading**: Only load what you need (50-200 tokens per message)
-- **Smart Compression**: Summarize old conversations 
+- **Smart Compression**: Summarize old conversations
 - **Intelligent Filtering**: Show only relevant messages
 
 ### 🧠 **SuperClaude Integration**
+
 Every message can include intelligent suggestions:
+
 ```typescript
 {
   "suggested_approach": {
     "superclaude_commands": ["/sc:analyze --security", "/sc:implement"],
-    "superclaude_personas": ["--persona-security", "--persona-backend"], 
+    "superclaude_personas": ["--persona-security", "--persona-backend"],
     "superclaude_flags": ["--think-hard", "--validate"],
     "analysis_focus": ["sql-injection", "input-validation"],
     "tools_recommended": ["Sequential", "Context7"]
@@ -239,12 +246,13 @@ Every message can include intelligent suggestions:
 ```
 
 ### 📊 **Real-time Dashboard**
+
 ```bash
 ccp status
 # 📊 System Status
 # ┌─────────────────┬───────┐
 # │ Active Messages │   12  │
-# │ Participants    │    4  │  
+# │ Participants    │    4  │
 # │ Threads         │    8  │
 # │ Storage Used    │ 2.3MB │
 # └─────────────────┴───────┘
@@ -254,53 +262,74 @@ ccp status
 
 ## 🎯 **Core MCP Tools**
 
-| Tool | Purpose | Example |
-|------|---------|---------|
-| `ccp_send_message` | Send coordination messages | Cross-team feature specs |
-| `ccp_get_messages` | Retrieve filtered messages | Get your pending tasks |
-| `ccp_search_messages` | Semantic search | Find security discussions |
-| `ccp_respond_message` | Reply to messages | Provide implementation updates |
-| `ccp_compact_thread` | Optimize token usage | Summarize long discussions |
-| `ccp_whoami` | Show your identity | Which Claude am I? |
-| `ccp_help` | Get help | How do I use this tool? |
-| `ccp_setup_guide` | Interactive guides | Help me get started |
+| Tool                  | Purpose                    | Example                        |
+| --------------------- | -------------------------- | ------------------------------ |
+| `ccp_send_message`    | Send coordination messages | Cross-team feature specs       |
+| `ccp_get_messages`    | Retrieve filtered messages | Get your pending tasks         |
+| `ccp_search_messages` | Semantic search            | Find security discussions      |
+| `ccp_respond_message` | Reply to messages          | Provide implementation updates |
+| `ccp_close_thread`    | Close entire threads       | Mark all messages as resolved  |
+| `ccp_compact_thread`  | Optimize token usage       | Summarize long discussions     |
+| `ccp_whoami`          | Show your identity         | Which Claude am I?             |
+| `ccp_help`            | Get help                   | How do I use this tool?        |
+| `ccp_setup_guide`     | Interactive guides         | Help me get started            |
 
 ---
 
 ## 🏃‍♂️ **Quick Examples**
 
 ### 📨 **Send a Message**
+
 ```typescript
 await ccp_send_message({
-  to: ["@mobile"],
-  type: "sync",
-  priority: "M",
-  subject: "API endpoint is ready",
-  content: "The new /users/profile endpoint is deployed and tested. Integration can begin!",
-  tags: ["api", "ready-for-integration"]
+  to: ['@mobile'],
+  type: 'sync',
+  priority: 'M',
+  subject: 'API endpoint is ready',
+  content: 'The new /users/profile endpoint is deployed and tested. Integration can begin!',
+  tags: ['api', 'ready-for-integration'],
 })
 ```
 
 ### 📥 **Get Your Messages**
+
 ```typescript
-// Check what needs your attention
+// Check what needs your attention (default: only active messages)
 await ccp_get_messages({
-  status: ["pending"],
-  priority: ["H", "CRITICAL"],
+  status: ['pending'],
+  priority: ['H', 'CRITICAL'],
   limit: 5,
-  detail_level: "summary"
+  detail_level: 'summary',
+})
+
+// To see ALL messages including closed/archived ones:
+await ccp_get_messages({
+  active_only: false, // Shows resolved, archived, cancelled messages too
+  limit: 20,
 })
 ```
 
 ### 🔍 **Search Everything**
+
 ```typescript
 // Find that security discussion from last week
 await ccp_search_messages({
-  query: "JWT token expiration security",
+  query: 'JWT token expiration security',
   date_range: {
-    from: "2024-01-15",
-    to: "2024-01-22"
-  }
+    from: '2024-01-15',
+    to: '2024-01-22',
+  },
+})
+```
+
+### 🔒 **Close a Thread**
+
+```typescript
+// Close an entire discussion thread
+await ccp_close_thread({
+  thread_id: 'Q-mdi1x9gw-H8H-thread',
+  resolution_status: 'complete',
+  final_summary: 'Implemented new auth system with 2FA support. All security concerns addressed.',
 })
 ```
 
@@ -309,29 +338,31 @@ await ccp_search_messages({
 ## ⚙️ **Configuration**
 
 ### 📁 **Project Setup**
+
 ```yaml
 # .coordination/config.yaml
-participant_id: "@backend"
-data_directory: ".coordination"
+participant_id: '@backend'
+data_directory: '.coordination'
 archive_days: 30
 auto_compact: true
 
 participants:
-  - id: "@frontend"
-    capabilities: ["ui", "react", "typescript"]
-    default_priority: "M"
-  - id: "@backend" 
-    capabilities: ["api", "database", "auth"]
-    default_priority: "M"
-  - id: "@security"
-    capabilities: ["audit", "compliance", "penetration-testing"]
-    default_priority: "H"
-  - id: "@mobile"
-    capabilities: ["ios", "android", "react-native"]
-    default_priority: "M"
+  - id: '@frontend'
+    capabilities: ['ui', 'react', 'typescript']
+    default_priority: 'M'
+  - id: '@backend'
+    capabilities: ['api', 'database', 'auth']
+    default_priority: 'M'
+  - id: '@security'
+    capabilities: ['audit', 'compliance', 'penetration-testing']
+    default_priority: 'H'
+  - id: '@mobile'
+    capabilities: ['ios', 'android', 'react-native']
+    default_priority: 'M'
 ```
 
 ### 🔌 **Claude Code Integration**
+
 ```json
 {
   "mcpServers": {
@@ -350,15 +381,15 @@ participants:
 
 ## 📋 **Message Types**
 
-| Type | Purpose | Example Use Case |
-|------|---------|------------------|
-| `arch` | Architecture decisions | "Moving to microservices" |
-| `contract` | API contracts & interfaces | "New auth endpoint spec" |
-| `sync` | Status updates | "Feature is ready for testing" |
-| `update` | Progress reports | "50% complete on user dashboard" |
-| `q` | Questions | "Should we use Redis or Memcached?" |
-| `emergency` | Critical issues | "Production down - all hands!" |
-| `broadcast` | Announcements | "Team meeting at 3pm" |
+| Type        | Purpose                    | Example Use Case                    |
+| ----------- | -------------------------- | ----------------------------------- |
+| `arch`      | Architecture decisions     | "Moving to microservices"           |
+| `contract`  | API contracts & interfaces | "New auth endpoint spec"            |
+| `sync`      | Status updates             | "Feature is ready for testing"      |
+| `update`    | Progress reports           | "50% complete on user dashboard"    |
+| `q`         | Questions                  | "Should we use Redis or Memcached?" |
+| `emergency` | Critical issues            | "Production down - all hands!"      |
+| `broadcast` | Announcements              | "Team meeting at 3pm"               |
 
 > **⚠️ Important Note**: System-generated messages (from `@system`) are read-only. While participants can view these messages if they're recipients, they cannot respond directly to `@system` as it's not a registered participant. To discuss system messages, create a new message thread between active participants.
 
@@ -366,12 +397,12 @@ participants:
 
 ## 🎖️ **Priority Levels**
 
-| Priority | Response Time | Example |
-|----------|---------------|---------|
-| `CRITICAL` | Immediate | Production outage |
-| `H` | Within hours | Security vulnerability |
-| `M` | Within days | Feature specification |
-| `L` | When convenient | Code cleanup |
+| Priority   | Response Time   | Example                |
+| ---------- | --------------- | ---------------------- |
+| `CRITICAL` | Immediate       | Production outage      |
+| `H`        | Within hours    | Security vulnerability |
+| `M`        | Within days     | Feature specification  |
+| `L`        | When convenient | Code cleanup           |
 
 ---
 
@@ -387,7 +418,7 @@ ccp send --to="@frontend" --subject="API ready" --content="Integration can start
 # Check your inbox
 ccp list --status=pending --priority=H
 
-# Search messages  
+# Search messages
 ccp search "authentication API"
 
 # Get system status
@@ -428,27 +459,30 @@ npm run lint && npm run format
 ## 🔧 **Advanced Features**
 
 ### 🗜️ **Automatic Token Optimization**
+
 ```typescript
 // CCP automatically compacts threads when they get too long
 await ccp_compact_thread({
-  thread_id: "AUTH-001-thread", 
-  strategy: "summarize", // or "consolidate", "archive"
+  thread_id: 'AUTH-001-thread',
+  strategy: 'summarize', // or "consolidate", "archive"
   preserve_decisions: true,
-  max_tokens: 2000
+  max_tokens: 2000,
 })
 ```
 
 ### 📈 **Analytics & Insights**
+
 ```typescript
 // Get system statistics
 await ccp_get_stats({
-  time_range: "last_7_days",
+  time_range: 'last_7_days',
   include_participants: true,
-  include_thread_analytics: true
+  include_thread_analytics: true,
 })
 ```
 
 ### 🔄 **Migration from Manual Systems**
+
 ```bash
 # Import your existing coordination files
 ccp migrate --from=LLM_COORDINATION.md --format=markdown
@@ -460,13 +494,13 @@ ccp migrate --from=LLM_COORDINATION.md --format=markdown
 ## 🏆 **Success Stories**
 
 > **"CCP transformed our 4-Claude development team from chaos to symphony. We ship features 3x faster now!"**  
-> — *Senior Developer at TechCorp*
+> — _Senior Developer at TechCorp_
 
 > **"Security reviews that used to take days now happen in real-time. Game changer!"**  
-> — *Security Architect at FinanceApp*
+> — _Security Architect at FinanceApp_
 
 > **"Our mobile and backend teams finally speak the same language. No more integration surprises!"**  
-> — *Product Manager at StartupXYZ*
+> — _Product Manager at StartupXYZ_
 
 ---
 

@@ -1,9 +1,24 @@
 import { z } from 'zod'
 
 // Core message types
-export const MessageType = z.enum(['arch', 'contract', 'sync', 'update', 'q', 'emergency', 'broadcast'])
+export const MessageType = z.enum([
+  'arch',
+  'contract',
+  'sync',
+  'update',
+  'q',
+  'emergency',
+  'broadcast',
+])
 export const Priority = z.enum(['CRITICAL', 'H', 'M', 'L'])
-export const MessageStatus = z.enum(['pending', 'read', 'responded', 'resolved', 'archived', 'cancelled'])
+export const MessageStatus = z.enum([
+  'pending',
+  'read',
+  'responded',
+  'resolved',
+  'archived',
+  'cancelled',
+])
 export const ResolutionStatus = z.enum(['partial', 'complete', 'requires_followup', 'blocked'])
 
 export type MessageType = z.infer<typeof MessageType>
@@ -13,7 +28,7 @@ export type ResolutionStatus = z.infer<typeof ResolutionStatus>
 
 // Participant schema
 export const ParticipantId = z.string().regex(/^@[a-zA-Z][a-zA-Z0-9_-]*$/, {
-  message: 'Participant ID must start with @ followed by alphanumeric characters'
+  message: 'Participant ID must start with @ followed by alphanumeric characters',
 })
 
 export const Participant = z.object({
@@ -22,7 +37,7 @@ export const Participant = z.object({
   last_seen: z.date().optional(),
   status: z.enum(['active', 'inactive', 'maintenance']).default('active'),
   preferences: z.record(z.unknown()).optional(),
-  default_priority: Priority.default('M')
+  default_priority: Priority.default('M'),
 })
 
 export type ParticipantId = z.infer<typeof ParticipantId>
@@ -37,36 +52,38 @@ export const CoordinationMessage = z.object({
   type: MessageType,
   priority: Priority,
   status: MessageStatus.default('pending'),
-  
+
   // Content
   subject: z.string().max(200),
   summary: z.string().max(500),
   content_ref: z.string().optional(),
-  
+
   // Metadata
   created_at: z.date(),
   updated_at: z.date(),
   expires_at: z.date().optional(),
   response_required: z.boolean().default(true),
   dependencies: z.array(z.string()).default([]),
-  
+
   // Indexing
   tags: z.array(z.string()).default([]),
   semantic_vector: z.array(z.number()).optional(),
-  
+
   // SuperClaude suggestions
-  suggested_approach: z.object({
-    superclaude_commands: z.array(z.string()).optional(),
-    superclaude_personas: z.array(z.string()).optional(),
-    superclaude_flags: z.array(z.string()).optional(),
-    analysis_focus: z.array(z.string()).optional(),
-    tools_recommended: z.array(z.string()).optional()
-  }).optional(),
-  
+  suggested_approach: z
+    .object({
+      superclaude_commands: z.array(z.string()).optional(),
+      superclaude_personas: z.array(z.string()).optional(),
+      superclaude_flags: z.array(z.string()).optional(),
+      analysis_focus: z.array(z.string()).optional(),
+      tools_recommended: z.array(z.string()).optional(),
+    })
+    .optional(),
+
   // Resolution tracking
   resolution_status: ResolutionStatus.optional(),
   resolved_at: z.date().optional(),
-  resolved_by: ParticipantId.optional()
+  resolved_by: ParticipantId.optional(),
 })
 
 export type CoordinationMessage = z.infer<typeof CoordinationMessage>
@@ -81,7 +98,7 @@ export const Conversation = z.object({
   last_activity: z.date(),
   status: z.enum(['active', 'resolved', 'archived']).default('active'),
   resolution_summary: z.string().optional(),
-  message_count: z.number().default(0)
+  message_count: z.number().default(0),
 })
 
 export type Conversation = z.infer<typeof Conversation>
@@ -94,15 +111,17 @@ export const CoordinationConfig = z.object({
   token_limit: z.number().positive().default(1000000),
   auto_compact: z.boolean().default(true),
   participants: z.array(Participant).default([]),
-  notification_settings: z.object({
-    enabled: z.boolean().default(true),
-    priority_threshold: Priority.default('M'),
-    batch_notifications: z.boolean().default(true)
-  }).default({
-    enabled: true,
-    priority_threshold: 'M' as Priority,
-    batch_notifications: true
-  })
+  notification_settings: z
+    .object({
+      enabled: z.boolean().default(true),
+      priority_threshold: Priority.default('M'),
+      batch_notifications: z.boolean().default(true),
+    })
+    .default({
+      enabled: true,
+      priority_threshold: 'M' as Priority,
+      batch_notifications: true,
+    }),
 })
 
 export type CoordinationConfig = z.infer<typeof CoordinationConfig>
@@ -117,13 +136,15 @@ export const SendMessageInput = z.object({
   response_required: z.boolean().default(true),
   expires_in_hours: z.number().positive().default(168),
   tags: z.array(z.string()).optional(),
-  suggested_approach: z.object({
-    superclaude_commands: z.array(z.string()).optional(),
-    superclaude_personas: z.array(z.string()).optional(),
-    superclaude_flags: z.array(z.string()).optional(),
-    analysis_focus: z.array(z.string()).optional(),
-    tools_recommended: z.array(z.string()).optional()
-  }).optional()
+  suggested_approach: z
+    .object({
+      superclaude_commands: z.array(z.string()).optional(),
+      superclaude_personas: z.array(z.string()).optional(),
+      superclaude_flags: z.array(z.string()).optional(),
+      analysis_focus: z.array(z.string()).optional(),
+      tools_recommended: z.array(z.string()).optional(),
+    })
+    .optional(),
 })
 
 export const GetMessagesInput = z.object({
@@ -134,32 +155,41 @@ export const GetMessagesInput = z.object({
   since_hours: z.number().positive().optional(),
   thread_id: z.string().optional(),
   limit: z.number().positive().max(100).default(20),
-  detail_level: z.enum(['index', 'summary', 'full']).default('full')
+  detail_level: z.enum(['index', 'summary', 'full']).default('full'),
+  active_only: z.boolean().default(true).optional(),
 })
 
 export const RespondMessageInput = z.object({
   message_id: z.string(),
   content: z.string(),
-  resolution_status: ResolutionStatus.optional()
+  resolution_status: ResolutionStatus.optional(),
 })
 
 export const SearchMessagesInput = z.object({
   query: z.string(),
   semantic: z.boolean().default(true),
   tags: z.array(z.string()).optional(),
-  date_range: z.object({
-    from: z.date().optional(),
-    to: z.date().optional()
-  }).optional(),
+  date_range: z
+    .object({
+      from: z.date().optional(),
+      to: z.date().optional(),
+    })
+    .optional(),
   participants: z.array(ParticipantId).optional(),
-  limit: z.number().positive().max(50).default(10)
+  limit: z.number().positive().max(50).default(10),
 })
 
 export const CompactThreadInput = z.object({
   thread_id: z.string(),
   strategy: z.enum(['summarize', 'consolidate', 'archive']).default('summarize'),
   preserve_decisions: z.boolean().default(true),
-  preserve_critical: z.boolean().default(true)
+  preserve_critical: z.boolean().default(true),
+})
+
+export const CloseThreadInput = z.object({
+  thread_id: z.string(),
+  resolution_status: ResolutionStatus.default('complete'),
+  final_summary: z.string().optional(),
 })
 
 export type SendMessageInput = z.infer<typeof SendMessageInput>
@@ -167,6 +197,7 @@ export type GetMessagesInput = z.infer<typeof GetMessagesInput>
 export type RespondMessageInput = z.infer<typeof RespondMessageInput>
 export type SearchMessagesInput = z.infer<typeof SearchMessagesInput>
 export type CompactThreadInput = z.infer<typeof CompactThreadInput>
+export type CloseThreadInput = z.infer<typeof CloseThreadInput>
 
 // Database row types (snake_case for SQLite)
 export interface MessageRow {
@@ -217,7 +248,7 @@ export interface ParticipantRow {
 // Error types
 export class CoordinationError extends Error {
   constructor(
-    message: string, 
+    message: string,
     public code: string,
     public details?: Record<string, unknown>
   ) {
