@@ -600,11 +600,23 @@ export class CoordinationMCPServer {
               ? '🟡'
               : '🟢'
 
+      let content = ''
+      if (input.detail_level === 'index') {
+        // Just the subject line
+        content = ''
+      } else if (input.detail_level === 'summary') {
+        // Show truncated summary
+        content = `   ${msg.summary.substring(0, 150)}${msg.summary.length > 150 ? '...' : ''}\n`
+      } else {
+        // detail_level === 'full' - show full content
+        content = `   ${msg.content}\n`
+      }
+
       return (
         `${status} ${priority} **${msg.id}** - ${msg.subject}\n` +
         `   From: ${msg.from} → To: ${msg.to.join(', ')}\n` +
         `   Type: ${msg.type} | Created: ${msg.created_at.toLocaleDateString()}\n` +
-        `   ${msg.summary.substring(0, 150)}${msg.summary.length > 150 ? '...' : ''}\n`
+        content
       )
     }
 
@@ -658,11 +670,18 @@ export class CoordinationMCPServer {
 
     const formatResult = (result: any) => {
       const relevance = Math.round(result.relevance_score * 100)
+      // Show match context if available, otherwise show a preview of content
+      const preview =
+        result.match_context ||
+        (result.message.content.length > 200
+          ? result.message.content.substring(0, 200) + '...'
+          : result.message.content)
+
       return (
         `**${result.message.id}** (${relevance}% match)\n` +
         `${result.message.subject}\n` +
         `From: ${result.message.from} | ${result.message.created_at.toLocaleDateString()}\n` +
-        `${result.match_context || result.message.summary.substring(0, 100)}...\n`
+        `${preview}\n`
       )
     }
 
