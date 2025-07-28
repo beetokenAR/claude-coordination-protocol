@@ -473,7 +473,7 @@ export class MessageManager {
     const messages = await this.getMessages(
       {
         thread_id: validated.thread_id,
-        limit: 1000,
+        limit: 100,
         active_only: false,
       },
       closingParticipant
