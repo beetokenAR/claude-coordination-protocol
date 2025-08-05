@@ -559,11 +559,8 @@ export class CoordinationMCPServer {
       ...rawInput,
       limit: rawInput.limit ?? 20,
       detail_level: rawInput.detail_level ?? 'full',
-      // Apply default status filtering when active_only is true (default) and no explicit status filter
-      status:
-        rawInput.active_only !== false && !rawInput.status
-          ? (['pending', 'read', 'responded'] as const)
-          : rawInput.status,
+      active_only: rawInput.active_only !== false,
+      // Don't override status filter - let the database query handle active_only filtering
     }
 
     const messages = await this.messageManager.getMessages(input, this.config.participant_id)
@@ -608,8 +605,9 @@ export class CoordinationMCPServer {
         // Show truncated summary
         content = `   ${msg.summary.substring(0, 150)}${msg.summary.length > 150 ? '...' : ''}\n`
       } else {
-        // detail_level === 'full' - show full content
-        content = `   ${msg.content}\n`
+        // detail_level === 'full' - show full content (use content field, fallback to summary)
+        const fullContent = msg.content || msg.summary
+        content = `   ${fullContent}\n`
       }
 
       return (

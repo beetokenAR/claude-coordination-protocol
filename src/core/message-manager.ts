@@ -62,6 +62,7 @@ export class MessageManager {
         AND ($priority IS NULL OR priority IN (SELECT value FROM json_each($priority)))
         AND ($since IS NULL OR created_at >= $since)
         AND ($thread_id IS NULL OR thread_id = $thread_id)
+        AND ($active_only = 0 OR status NOT IN ('resolved', 'archived', 'cancelled'))
       ORDER BY 
         CASE priority 
           WHEN 'CRITICAL' THEN 1
@@ -143,32 +144,30 @@ export class MessageManager {
       suggested_approach: validated.suggested_approach,
     }
 
-    // Insert into database
-    this.db.transaction(() => {
-      this.insertMessage.run(
-        message.id,
-        message.thread_id,
-        message.from,
-        JSON.stringify(message.to),
-        message.type,
-        message.priority,
-        message.status,
-        message.subject,
-        message.summary,
-        message.content_ref,
-        message.created_at.toISOString(),
-        message.updated_at.toISOString(),
-        message.expires_at?.toISOString(),
-        message.response_required ? 1 : 0,
-        JSON.stringify(message.dependencies),
-        JSON.stringify(message.tags),
-        null, // semantic_vector will be added later by indexing system
-        message.suggested_approach ? JSON.stringify(message.suggested_approach) : null
-      )
+    // Insert into database - NO transaction wrapper since individual operations are atomic
+    this.insertMessage.run(
+      message.id,
+      message.thread_id,
+      message.from,
+      JSON.stringify(message.to),
+      message.type,
+      message.priority,
+      message.status,
+      message.subject,
+      message.summary,
+      message.content_ref,
+      message.created_at.toISOString(),
+      message.updated_at.toISOString(),
+      message.expires_at?.toISOString(),
+      message.response_required ? 1 : 0,
+      JSON.stringify(message.dependencies),
+      JSON.stringify(message.tags),
+      null, // semantic_vector will be added later by indexing system
+      message.suggested_approach ? JSON.stringify(message.suggested_approach) : null
+    )
 
-      // Update or create conversation thread
-      this.updateConversationThread(message)
-    })
+    // Update or create conversation thread
+    this.updateConversationThread(message)
 
     return message
   }
@@ -206,6 +205,7 @@ export class MessageManager {
       priority: filters.priority ? JSON.stringify(filters.priority) : null,
       since: filters.since?.toISOString() || null,
       thread_id: filters.thread_id || null,
+      active_only: validated.active_only !== false ? 1 : 0,
       limit: pagination.limit,
       offset: pagination.offset,
     }) as MessageRow[]
@@ -353,23 +353,21 @@ export class MessageManager {
     }
 
     // Archive messages
-    this.db.transaction(() => {
-      const archiveMessage = this.db.prepare(`
-        UPDATE messages SET status = 'archived', updated_at = ? WHERE id = ?
-      `)
+    const archiveMessage = this.db.prepare(`
+      UPDATE messages SET status = 'archived', updated_at = ? WHERE id = ?
+    `)
 
-      for (const message of expiredMessages) {
-        archiveMessage.run(now.toISOString(), message.id)
+    for (const message of expiredMessages) {
+      archiveMessage.run(now.toISOString(), message.id)
 
-        // Move content file to archive if it exists
-        if (message.content_ref) {
-          this.archiveContentFile(message.content_ref).catch(error => {
-            // eslint-disable-next-line no-console
-            console.warn(`Failed to archive content file ${message.content_ref}:`, error)
-          })
-        }
+      // Move content file to archive if it exists
+      if (message.content_ref) {
+        this.archiveContentFile(message.content_ref).catch(error => {
+          // eslint-disable-next-line no-console
+          console.warn(`Failed to archive content file ${message.content_ref}:`, error)
+        })
       }
-    })
+    }
 
     return expiredMessages.length
   }
@@ -443,14 +441,21 @@ export class MessageManager {
     }
 
     // Load full content if requested and available
-    if (detailLevel === 'full' && message.content_ref) {
-      try {
-        const contentPath = path.join(this.dataDir, message.content_ref)
-        const fullContent = await fs.readFile(contentPath, 'utf-8')
-        message.summary = fullContent
-      } catch (_error) {
-        // eslint-disable-next-line no-console
-        console.warn(`Failed to load content for message ${message.id}:`, _error)
+    if (detailLevel === 'full') {
+      if (message.content_ref) {
+        try {
+          const contentPath = path.join(this.dataDir, message.content_ref)
+          const fullContent = await fs.readFile(contentPath, 'utf-8')
+          message.content = fullContent  // Put full content in the content field, not summary
+        } catch (_error) {
+          // eslint-disable-next-line no-console
+          console.warn(`Failed to load content for message ${message.id}:`, _error)
+          // If we can't load from file, use the summary as content
+          message.content = message.summary
+        }
+      } else {
+        // If no content_ref, the summary IS the full content (short messages)
+        message.content = message.summary
       }
     }
 

@@ -21,6 +21,7 @@ import {
   generateFragmentationWarnings,
 } from './utils/database-discovery.js'
 import { createMigrateCommand } from './cli/commands/migrate.js'
+import { DatabasePurger, PurgeLevel } from './database/purger.js'
 import {
   CoordinationConfig,
   ParticipantId,
@@ -785,6 +786,201 @@ participant
       db.close()
     } catch (error) {
       console.error(chalk.red('Failed to remove participant:'), error)
+      process.exit(1)
+    }
+  })
+
+// Purge database command
+program
+  .command('purge')
+  .description('Purge database contents with various levels of cleaning')
+  .option('--level <level>', 'Purge level: soft, standard, complete, full', 'soft')
+  .option('--dry-run', 'Show what would be deleted without actually deleting')
+  .option('--skip-backup', 'Skip automatic backup (not recommended)')
+  .option('--force', 'Force purge without confirmation (required for full purge)')
+  .option('--before <date>', 'Only purge messages before this date (YYYY-MM-DD)')
+  .action(async options => {
+    const spinner = ora('Preparing purge operation...').start()
+
+    try {
+      const config = await loadConfig()
+      const db = new CoordinationDatabase(config.data_directory)
+      const purger = new DatabasePurger(db.db)
+
+      // Parse before date if provided
+      let beforeDate: Date | undefined
+      if (options.before) {
+        beforeDate = new Date(options.before)
+        if (isNaN(beforeDate.getTime())) {
+          throw new Error('Invalid date format. Use YYYY-MM-DD')
+        }
+      }
+
+      // Get current statistics
+      spinner.text = 'Analyzing database...'
+      const stats = await purger.getStatistics()
+      spinner.stop()
+
+      // Show current status
+      console.log(chalk.blue('📊 Current Database Status:'))
+      console.log(`  Total Messages: ${stats.totalMessages}`)
+      console.log(`  Archived Messages: ${stats.archivedMessages}`)
+      console.log(`  Total Conversations: ${stats.totalConversations}`)
+      console.log(`  Total Participants: ${stats.totalParticipants}`)
+      console.log(`  Database Size: ${Math.round(stats.databaseSize / 1024)} KB`)
+      if (stats.lastPurge) {
+        console.log(`  Last Purge: ${stats.lastPurge.toLocaleString()}`)
+      }
+      console.log()
+
+      // Explain purge levels
+      const levelDescriptions = {
+        soft: 'Delete only archived and resolved messages',
+        standard: 'Delete all messages and conversations (keep participants)',
+        complete: 'Delete everything except metadata',
+        full: 'Complete database reset (requires --force flag)'
+      }
+
+      console.log(chalk.yellow(`⚠️  Purge Level: ${options.level}`))
+      console.log(`   ${levelDescriptions[options.level as PurgeLevel]}`)
+      
+      if (beforeDate) {
+        console.log(`   Only affecting data before: ${beforeDate.toLocaleDateString()}`)
+      }
+      console.log()
+
+      // Dry run preview
+      if (options.dryRun) {
+        const preview = await purger.purge({
+          level: options.level as PurgeLevel,
+          dryRun: true,
+          skipBackup: true,
+          force: options.force,
+          beforeDate
+        })
+
+        console.log(chalk.blue('🔍 Dry Run Results (preview):'))
+        console.log(`  Would delete ${preview.deletedMessages} messages`)
+        console.log(`  Would delete ${preview.deletedConversations} conversations`)
+        console.log(`  Would delete ${preview.deletedParticipants} participants`)
+        console.log()
+        console.log(chalk.gray('Run without --dry-run to execute'))
+        
+        db.close()
+        return
+      }
+
+      // Confirmation for destructive operations
+      if (!options.force && (options.level === 'complete' || options.level === 'full')) {
+        const confirmAnswer = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'confirm',
+            message: `Are you sure you want to perform a ${options.level} purge? This cannot be undone!`,
+            default: false
+          }
+        ])
+
+        if (!confirmAnswer.confirm) {
+          console.log(chalk.yellow('❌ Purge cancelled'))
+          db.close()
+          return
+        }
+
+        if (options.level === 'full') {
+          const doubleConfirm = await inquirer.prompt([
+            {
+              type: 'input',
+              name: 'confirmText',
+              message: 'Type "DELETE EVERYTHING" to confirm full database purge:',
+              validate: input => input === 'DELETE EVERYTHING' || 'Please type exactly: DELETE EVERYTHING'
+            }
+          ])
+
+          if (doubleConfirm.confirmText !== 'DELETE EVERYTHING') {
+            console.log(chalk.yellow('❌ Purge cancelled'))
+            db.close()
+            return
+          }
+          options.force = true
+        }
+      }
+
+      // Execute purge
+      spinner.start('Executing purge operation...')
+      
+      const result = await purger.purge({
+        level: options.level as PurgeLevel,
+        dryRun: false,
+        skipBackup: options.skipBackup,
+        force: options.force,
+        beforeDate
+      })
+
+      spinner.succeed(chalk.green('✅ Purge completed successfully!'))
+
+      // Show results
+      console.log()
+      console.log(chalk.green('📊 Purge Results:'))
+      console.log(`  Deleted Messages: ${result.deletedMessages}`)
+      console.log(`  Deleted Conversations: ${result.deletedConversations}`)
+      console.log(`  Deleted Participants: ${result.deletedParticipants}`)
+      
+      if (result.freedSpace && result.freedSpace > 0) {
+        console.log(`  Space Reclaimed: ${Math.round(result.freedSpace / 1024)} KB`)
+      }
+      
+      if (result.backupPath) {
+        console.log(`  Backup Created: ${result.backupPath}`)
+      }
+      
+      console.log(`  Duration: ${result.duration}ms`)
+
+      db.close()
+    } catch (error) {
+      spinner.fail(chalk.red('❌ Purge failed'))
+      console.error(error)
+      process.exit(1)
+    }
+  })
+
+// Restore from backup command
+program
+  .command('restore')
+  .description('Restore database from a backup')
+  .argument('<backup-path>', 'Path to backup file')
+  .action(async backupPath => {
+    const spinner = ora('Restoring database...').start()
+
+    try {
+      const config = await loadConfig()
+      const db = new CoordinationDatabase(config.data_directory)
+      const purger = new DatabasePurger(db.db)
+
+      // Confirm restoration
+      const answer = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'confirm',
+          message: 'This will replace the current database. Are you sure?',
+          default: false
+        }
+      ])
+
+      if (!answer.confirm) {
+        console.log(chalk.yellow('❌ Restore cancelled'))
+        db.close()
+        return
+      }
+
+      await purger.restoreFromBackup(backupPath)
+      
+      spinner.succeed(chalk.green('✅ Database restored successfully!'))
+      console.log(`Restored from: ${backupPath}`)
+
+    } catch (error) {
+      spinner.fail(chalk.red('❌ Restore failed'))
+      console.error(error)
       process.exit(1)
     }
   })

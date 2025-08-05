@@ -5,7 +5,7 @@ import { DatabaseError } from '../types/index.js'
 import { migrateSchema } from './schema.js'
 
 export class CoordinationDatabase {
-  private db: Database.Database
+  public db: Database.Database  // Make db accessible for DatabasePurger
   private dataDir: string
   private dbPath: string
 

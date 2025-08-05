@@ -56,6 +56,7 @@ export const CoordinationMessage = z.object({
   // Content
   subject: z.string().max(200),
   summary: z.string().max(500),
+  content: z.string().optional(), // Full content when detail_level is 'full'
   content_ref: z.string().optional(),
 
   // Metadata
