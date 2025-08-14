@@ -270,23 +270,63 @@ export class MessageManager {
       throw new ValidationError('Access denied: not authorized to respond to this message')
     }
 
-    // Create response message
-    const responseMessage = await this.createMessage(
-      {
-        to: [originalMessage.from],
-        type: originalMessage.type,
-        priority: originalMessage.priority,
-        subject: `Re: ${originalMessage.subject}`,
-        content: validated.content,
-        response_required: false,
-        expires_in_hours: 168, // 1 week default
-        tags: [`response_to:${validated.message_id}`],
-      },
-      respondingParticipant
+    // Create response message - but we need to use the same thread ID!
+    // We'll need to create the message manually to preserve the thread ID
+    const responseMessageId = this.generateMessageId(originalMessage.type)
+    const now = new Date()
+    const expiresAt = addHours(now, 168) // 1 week default
+    
+    // Store content if large
+    let contentRef: string | undefined
+    if (validated.content.length > 1000) {
+      contentRef = await this.storeMessageContent(originalMessage.thread_id, responseMessageId, validated.content)
+    }
+
+    const responseMessage: CoordinationMessage = {
+      id: responseMessageId,
+      thread_id: originalMessage.thread_id, // USE ORIGINAL THREAD ID!
+      from: respondingParticipant,
+      to: [originalMessage.from],
+      type: originalMessage.type,
+      priority: originalMessage.priority,
+      status: 'pending',
+      subject: `Re: ${originalMessage.subject}`,
+      summary: validated.content.length > 500
+        ? validated.content.substring(0, 500) + '...'
+        : validated.content,
+      content_ref: contentRef,
+      created_at: now,
+      updated_at: now,
+      expires_at: expiresAt,
+      response_required: false,
+      dependencies: [],
+      tags: [`response_to:${validated.message_id}`],
+      content: validated.content.length <= 1000 ? validated.content : undefined,
+    }
+
+    // Insert the response message
+    this.insertMessage.run(
+      responseMessage.id,
+      responseMessage.thread_id,
+      responseMessage.from,
+      JSON.stringify(responseMessage.to),
+      responseMessage.type,
+      responseMessage.priority,
+      responseMessage.status,
+      responseMessage.subject,
+      responseMessage.summary,
+      responseMessage.content_ref || null,
+      responseMessage.created_at.toISOString(),
+      responseMessage.updated_at.toISOString(),
+      responseMessage.expires_at?.toISOString() || null,
+      responseMessage.response_required ? 1 : 0,
+      JSON.stringify(responseMessage.dependencies),
+      JSON.stringify(responseMessage.tags),
+      null, // semantic_vector will be added later by indexing system
+      null  // suggested_approach
     )
 
     // Update original message status
-    const now = new Date()
     this.updateMessage.run(
       'responded',
       now.toISOString(),
@@ -474,10 +514,47 @@ export class MessageManager {
   async closeThread(input: CloseThreadInput, closingParticipant: ParticipantId): Promise<number> {
     const validated = validateInput(CloseThreadInput, input, 'close_thread')
 
+    // Check if user provided a message ID instead of thread ID
+    let actualThreadId = validated.thread_id
+    
+    if (!validated.thread_id.endsWith('-thread')) {
+      // User provided a message ID - try to find the actual thread ID
+      const messageById = await this.getMessageById(validated.thread_id, closingParticipant, 'index')
+      
+      if (messageById) {
+        // Found the message - use its thread ID
+        actualThreadId = messageById.thread_id
+        // Auto-converted message ID to thread ID
+      } else {
+        // Maybe they meant to add -thread suffix?
+        const possibleThreadId = `${validated.thread_id}-thread`
+        const testMessages = await this.getMessages(
+          {
+            thread_id: possibleThreadId,
+            limit: 1,
+            active_only: false,
+          },
+          closingParticipant
+        )
+        
+        if (testMessages.length > 0) {
+          actualThreadId = possibleThreadId
+          // Auto-corrected to thread ID
+        } else {
+          throw new ValidationError(
+            `Unable to find thread for: ${validated.thread_id}\n` +
+            `Please provide either:\n` +
+            `1. A valid message ID (we'll find the thread)\n` +
+            `2. A thread ID (format: INITIAL-MESSAGE-ID-thread)`
+          )
+        }
+      }
+    }
+
     // Get all messages in the thread
     const messages = await this.getMessages(
       {
-        thread_id: validated.thread_id,
+        thread_id: actualThreadId,
         limit: 100,
         active_only: false,
       },

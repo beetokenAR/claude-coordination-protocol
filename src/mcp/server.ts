@@ -317,7 +317,7 @@ export class CoordinationMCPServer {
             properties: {
               thread_id: {
                 type: 'string',
-                description: 'Thread ID to close',
+                description: 'Thread ID to close (format: message_id + "-thread", e.g., "CONTRACT-abc123-XYZ-thread"). Note: Use thread ID, not message ID.',
               },
               resolution_status: {
                 type: 'string',
@@ -613,7 +613,7 @@ export class CoordinationMCPServer {
       return (
         `${status} ${priority} **${msg.id}** - ${msg.subject}\n` +
         `   From: ${msg.from} → To: ${msg.to.join(', ')}\n` +
-        `   Type: ${msg.type} | Created: ${msg.created_at.toLocaleDateString()}\n` +
+        `   Thread: ${msg.thread_id} | Type: ${msg.type} | Created: ${msg.created_at.toLocaleDateString()}\n` +
         content
       )
     }
@@ -894,7 +894,7 @@ export class CoordinationMCPServer {
           '🔒 **Close Thread**\n\n' +
           'Close an entire thread by marking all messages as resolved.\n\n' +
           '**Required Parameters:**\n' +
-          '• `thread_id`: Thread ID to close\n\n' +
+          '• `thread_id`: Thread ID to close (format: message_id + "-thread", e.g., "CONTRACT-abc123-XYZ-thread")\n\n' +
           '**Optional Parameters:**\n' +
           '• `resolution_status`: Resolution status (complete, partial, requires_followup, blocked)\n' +
           '• `final_summary`: Optional final summary message',
